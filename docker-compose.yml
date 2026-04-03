@@ -1,0 +1,24 @@
+# Optional local dev compose (no database wired yet)
+services:
+  server:
+    image: node:20
+    working_dir: /app/server
+    volumes:
+      - ./:/app
+    command: ["npm", "run", "dev"]
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - CORS_ORIGIN=http://localhost:5173
+
+  client:
+    image: node:20
+    working_dir: /app/client
+    volumes:
+      - ./:/app
+    command: ["npm", "run", "dev", "--", "--host"]
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:5001/api
