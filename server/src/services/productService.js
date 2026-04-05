@@ -1,41 +1,78 @@
-const { store, id } = require('../data/store')
+const { getSupabase } = require('../config/db')
 
-async function list() {
-	return store.products
-}
-
-async function create(payload) {
-	const product = {
-		id: id('p'),
-		name: payload.name,
-		price: Number(payload.price || 0),
-		sku: payload.sku || '',
-		stock: Number(payload.stock || 0),
-		categoryId: payload.categoryId || null,
+function mapProduct(row) {
+	if (!row) return row
+	return {
+		id: row.id,
+		tenantId: row.tenant_id,
+		name: row.name,
+		sku: row.sku,
+		price: Number(row.price || 0),
+		stock: Number(row.stock || 0),
+		categoryId: row.category_id,
+		createdAt: row.created_at,
 	}
-	store.products.push(product)
-	return product
 }
 
-async function update(productId, payload) {
-	const product = store.products.find((p) => p.id === productId)
-	if (!product) {
+async function list(tenantId) {
+	const { data, error } = await getSupabase()
+		.from('products')
+		.select('*')
+		.eq('tenant_id', tenantId)
+		.order('created_at', { ascending: false })
+	if (error) throw error
+	return (data || []).map(mapProduct)
+}
+
+async function create(tenantId, payload) {
+	const { data, error } = await getSupabase()
+		.from('products')
+		.insert({
+			tenant_id: tenantId,
+			name: payload.name,
+			sku: payload.sku || '',
+			price: Number(payload.price || 0),
+			stock: Number(payload.stock || 0),
+			category_id: payload.categoryId || null,
+		})
+		.select()
+		.single()
+	if (error) throw error
+	return mapProduct(data)
+}
+
+async function update(tenantId, productId, payload) {
+	const updatePayload = {}
+	if (payload.name !== undefined) updatePayload.name = payload.name
+	if (payload.price !== undefined) updatePayload.price = Number(payload.price)
+	if (payload.sku !== undefined) updatePayload.sku = payload.sku
+	if (payload.stock !== undefined) updatePayload.stock = Number(payload.stock)
+	if (payload.categoryId !== undefined) updatePayload.category_id = payload.categoryId
+
+	const { data, error } = await getSupabase()
+		.from('products')
+		.update(updatePayload)
+		.eq('id', productId)
+		.eq('tenant_id', tenantId)
+		.select()
+		.single()
+	if (error) throw error
+	if (!data) {
 		const err = new Error('Product not found')
 		err.status = 404
 		throw err
 	}
-	if (payload.name !== undefined) product.name = payload.name
-	if (payload.price !== undefined) product.price = Number(payload.price || 0)
-	if (payload.sku !== undefined) product.sku = payload.sku
-	if (payload.stock !== undefined) product.stock = Number(payload.stock || 0)
-	if (payload.categoryId !== undefined) product.categoryId = payload.categoryId
-	return product
+	return mapProduct(data)
 }
 
-async function remove(productId) {
-	const before = store.products.length
-	store.products = store.products.filter((p) => p.id !== productId)
-	return store.products.length !== before
+async function remove(tenantId, productId) {
+	const { error } = await getSupabase()
+		.from('products')
+		.delete()
+		.eq('id', productId)
+		.eq('tenant_id', tenantId)
+	if (error) throw error
+	return true
 }
 
 module.exports = { list, create, update, remove }

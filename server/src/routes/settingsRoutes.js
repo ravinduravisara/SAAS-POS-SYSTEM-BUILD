@@ -1,10 +1,12 @@
 const express = require('express')
 const auth = require('../middlewares/authMiddleware')
+const tenant = require('../middlewares/tenantMiddleware')
 const { getSettings, updateSettings } = require('../controllers/settingsController')
 
 const router = express.Router()
 
-router.get('/', auth, getSettings)
-router.put('/', auth, updateSettings)
+router.use(auth, tenant)
+router.get('/', getSettings)
+router.put('/', updateSettings)
 
 module.exports = router

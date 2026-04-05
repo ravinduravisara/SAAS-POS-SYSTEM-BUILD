@@ -2,7 +2,7 @@ const customerService = require('../services/customerService')
 
 async function listCustomers(req, res, next) {
 	try {
-		res.json(await customerService.list())
+		res.json(await customerService.list(req.user.tenantId))
 	} catch (err) {
 		next(err)
 	}
@@ -10,7 +10,7 @@ async function listCustomers(req, res, next) {
 
 async function createCustomer(req, res, next) {
 	try {
-		res.status(201).json(await customerService.create(req.body || {}))
+		res.status(201).json(await customerService.create(req.user.tenantId, req.body || {}))
 	} catch (err) {
 		next(err)
 	}
@@ -18,7 +18,7 @@ async function createCustomer(req, res, next) {
 
 async function updateCustomer(req, res, next) {
 	try {
-		res.json(await customerService.update(req.params.id, req.body || {}))
+		res.json(await customerService.update(req.user.tenantId, req.params.id, req.body || {}))
 	} catch (err) {
 		next(err)
 	}
@@ -26,7 +26,7 @@ async function updateCustomer(req, res, next) {
 
 async function deleteCustomer(req, res, next) {
 	try {
-		const ok = await customerService.remove(req.params.id)
+		const ok = await customerService.remove(req.user.tenantId, req.params.id)
 		res.json({ ok })
 	} catch (err) {
 		next(err)

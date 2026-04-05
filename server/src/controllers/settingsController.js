@@ -1,12 +1,11 @@
-const { store } = require('../data/store')
+const settingsService = require('../services/settingsService')
 
 async function getSettings(req, res) {
-	res.json(store.settings)
+	res.json(await settingsService.get(req.user.tenantId))
 }
 
 async function updateSettings(req, res) {
-	store.settings = { ...store.settings, ...(req.body || {}) }
-	res.json(store.settings)
+	res.json(await settingsService.update(req.user.tenantId, req.body || {}))
 }
 
 module.exports = { getSettings, updateSettings }

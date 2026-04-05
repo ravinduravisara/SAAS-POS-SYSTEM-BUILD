@@ -1,3 +1,5 @@
+const { verifyToken } = require('../utils/generateToken')
+
 function authMiddleware(req, res, next) {
 	const header = req.headers.authorization || ''
 	const token = header.startsWith('Bearer ') ? header.slice(7) : null
@@ -6,9 +8,13 @@ function authMiddleware(req, res, next) {
 		return res.status(401).json({ message: 'Unauthorized' })
 	}
 
-	// Demo only: attach a mock user
-	req.user = { id: 'demo', role: 'admin' }
-	return next()
+	try {
+		const payload = verifyToken(token)
+		req.user = payload
+		next()
+	} catch (err) {
+		return res.status(401).json({ message: 'Invalid or expired token' })
+	}
 }
 
 module.exports = authMiddleware

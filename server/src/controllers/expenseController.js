@@ -1,20 +1,11 @@
-const { store, id } = require('../data/store')
+const expenseService = require('../services/expenseService')
 
 async function listExpenses(req, res) {
-	res.json(store.expenses)
+	res.json(await expenseService.list(req.user.tenantId))
 }
 
 async function createExpense(req, res) {
-	const payload = req.body || {}
-	const expense = {
-		id: id('ex'),
-		createdAt: new Date().toISOString(),
-		title: payload.title,
-		amount: Number(payload.amount || 0),
-		notes: payload.notes || '',
-	}
-	store.expenses.unshift(expense)
-	res.status(201).json(expense)
+	res.status(201).json(await expenseService.create(req.user.tenantId, req.body || {}))
 }
 
 module.exports = { listExpenses, createExpense }

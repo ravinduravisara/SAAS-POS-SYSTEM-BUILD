@@ -1,5 +1,6 @@
 const express = require('express')
 const auth = require('../middlewares/authMiddleware')
+const tenant = require('../middlewares/tenantMiddleware')
 const validate = require('../middlewares/validateMiddleware')
 const { customerCreateValidator } = require('../validators/customerValidator')
 const {
@@ -11,9 +12,10 @@ const {
 
 const router = express.Router()
 
-router.get('/', auth, listCustomers)
-router.post('/', auth, validate(customerCreateValidator), createCustomer)
-router.put('/:id', auth, updateCustomer)
-router.delete('/:id', auth, deleteCustomer)
+router.use(auth, tenant)
+router.get('/', listCustomers)
+router.post('/', validate(customerCreateValidator), createCustomer)
+router.put('/:id', updateCustomer)
+router.delete('/:id', deleteCustomer)
 
 module.exports = router

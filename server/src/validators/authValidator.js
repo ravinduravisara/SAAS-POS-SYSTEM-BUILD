@@ -5,8 +5,10 @@ function loginValidator(req) {
 }
 
 function registerValidator(req) {
-	const { name, email, password } = req.body || {}
-	if (!name || !email || !password) return { error: 'Name, email and password are required' }
+	const { name, email, password, storeName } = req.body || {}
+	if (!name || !email || !password || !storeName) {
+		return { error: 'Name, email, password and store name are required' }
+	}
 	return { ok: true }
 }
 

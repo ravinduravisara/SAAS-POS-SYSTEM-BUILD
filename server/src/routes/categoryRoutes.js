@@ -1,5 +1,6 @@
 const express = require('express')
 const auth = require('../middlewares/authMiddleware')
+const tenant = require('../middlewares/tenantMiddleware')
 const {
 	listCategories,
 	createCategory,
@@ -9,9 +10,10 @@ const {
 
 const router = express.Router()
 
-router.get('/', auth, listCategories)
-router.post('/', auth, createCategory)
-router.put('/:id', auth, updateCategory)
-router.delete('/:id', auth, deleteCategory)
+router.use(auth, tenant)
+router.get('/', listCategories)
+router.post('/', createCategory)
+router.put('/:id', updateCategory)
+router.delete('/:id', deleteCategory)
 
 module.exports = router

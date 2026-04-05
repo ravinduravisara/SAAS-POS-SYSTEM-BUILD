@@ -1,16 +1,8 @@
-const reportService = require('../services/reportService')
-const { store } = require('../data/store')
+const dashboardService = require('../services/dashboardService')
 
 async function stats(req, res, next) {
 	try {
-		const summary = await reportService.summary()
-		const lowStock = store.products.filter((p) => Number(p.stock || 0) <= 5).length
-		res.json({
-			...summary,
-			lowStock,
-			products: store.products.length,
-			customers: store.customers.length,
-		})
+		res.json(await dashboardService.stats(req.user.tenantId))
 	} catch (err) {
 		next(err)
 	}

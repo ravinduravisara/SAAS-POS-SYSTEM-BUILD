@@ -1,7 +1,12 @@
-const crypto = require('crypto')
+const jwt = require('jsonwebtoken')
+const env = require('../config/env')
 
-function generateToken() {
-	return crypto.randomUUID()
+function generateToken(payload) {
+	return jwt.sign(payload, env.jwtSecret, { expiresIn: '7d' })
 }
 
-module.exports = generateToken
+function verifyToken(token) {
+	return jwt.verify(token, env.jwtSecret)
+}
+
+module.exports = { generateToken, verifyToken }
