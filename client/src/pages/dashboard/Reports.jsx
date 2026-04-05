@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import PlanGate from '../../components/common/PlanGate.jsx'
 import RevenueCard from '../../components/reports/RevenueCard.jsx'
 import TopProducts from '../../components/reports/TopProducts.jsx'
 import reportService from '../../services/reportService'
@@ -11,9 +12,11 @@ export default function Reports() {
 	}, [])
 
 	return (
-		<div className="grid">
-			<RevenueCard revenue={data.revenue} sales={data.sales} />
-			<TopProducts items={data.topProducts} />
-		</div>
+		<PlanGate feature="reports">
+			<div className="grid">
+				<RevenueCard revenue={data.revenue} sales={data.sales} />
+				<TopProducts items={data.topProducts} />
+			</div>
+		</PlanGate>
 	)
 }

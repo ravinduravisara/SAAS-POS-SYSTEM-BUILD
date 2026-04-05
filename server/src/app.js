@@ -16,6 +16,7 @@ const inventoryRoutes = require('./routes/inventoryRoutes')
 const purchaseRoutes = require('./routes/purchaseRoutes')
 const expenseRoutes = require('./routes/expenseRoutes')
 const dashboardRoutes = require('./routes/dashboardRoutes')
+const superAdminRoutes = require('./routes/superAdminRoutes')
 
 const app = express()
 
@@ -37,6 +38,7 @@ app.use('/api/inventory', inventoryRoutes)
 app.use('/api/purchases', purchaseRoutes)
 app.use('/api/expenses', expenseRoutes)
 app.use('/api/dashboard', dashboardRoutes)
+app.use('/api/super-admin', superAdminRoutes)
 
 app.use(errorMiddleware)
 

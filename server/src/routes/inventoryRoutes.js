@@ -1,11 +1,13 @@
 const express = require('express')
 const auth = require('../middlewares/authMiddleware')
+const tenant = require('../middlewares/tenantMiddleware')
 const { listInventory, setStock, adjustStock } = require('../controllers/inventoryController')
 
 const router = express.Router()
 
-router.get('/', auth, listInventory)
-router.post('/set', auth, setStock)
-router.post('/adjust', auth, adjustStock)
+router.use(auth, tenant)
+router.get('/', listInventory)
+router.post('/set', setStock)
+router.post('/adjust', adjustStock)
 
 module.exports = router

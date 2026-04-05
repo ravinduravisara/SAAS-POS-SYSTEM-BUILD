@@ -1,5 +1,6 @@
 const express = require('express')
 const auth = require('../middlewares/authMiddleware')
+const tenant = require('../middlewares/tenantMiddleware')
 const {
 	listUsers,
 	createUser,
@@ -9,9 +10,10 @@ const {
 
 const router = express.Router()
 
-router.get('/', auth, listUsers)
-router.post('/', auth, createUser)
-router.put('/:id', auth, updateUser)
-router.delete('/:id', auth, deleteUser)
+router.use(auth, tenant)
+router.get('/', listUsers)
+router.post('/', createUser)
+router.put('/:id', updateUser)
+router.delete('/:id', deleteUser)
 
 module.exports = router

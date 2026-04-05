@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './ProtectedRoute.jsx'
+import SuperAdminRoute from './SuperAdminRoute.jsx'
 
 import Login from '../pages/auth/Login.jsx'
 import Register from '../pages/auth/Register.jsx'
@@ -19,6 +20,11 @@ import Reports from '../pages/dashboard/Reports.jsx'
 import Users from '../pages/dashboard/Users.jsx'
 import Settings from '../pages/dashboard/Settings.jsx'
 import NotFound from '../pages/dashboard/NotFound.jsx'
+import SuperAdminLayout from '../components/superAdmin/SuperAdminLayout.jsx'
+import SuperAdminDashboard from '../pages/superAdmin/SuperAdminDashboard.jsx'
+import TenantList from '../pages/superAdmin/TenantList.jsx'
+import TenantDetail from '../pages/superAdmin/TenantDetail.jsx'
+import Subscriptions from '../pages/superAdmin/Subscriptions.jsx'
 
 export default function AppRoutes() {
 	return (
@@ -28,6 +34,15 @@ export default function AppRoutes() {
 			<Route path="/login" element={<Login />} />
 			<Route path="/register" element={<Register />} />
 			<Route path="/forgot-password" element={<ForgotPassword />} />
+
+			<Route path="/super-admin" element={<SuperAdminRoute />}>
+				<Route element={<SuperAdminLayout />}>
+					<Route index element={<SuperAdminDashboard />} />
+					<Route path="tenants" element={<TenantList />} />
+					<Route path="tenants/:id" element={<TenantDetail />} />
+					<Route path="subscriptions" element={<Subscriptions />} />
+				</Route>
+			</Route>
 
 			<Route element={<ProtectedRoute />}>
 				<Route path="/dashboard" element={<DashboardLayout />}>

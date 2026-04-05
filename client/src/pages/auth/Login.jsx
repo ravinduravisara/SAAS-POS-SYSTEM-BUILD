@@ -9,17 +9,17 @@ export default function Login() {
 	const dispatch = useDispatch()
 	const navigate = useNavigate()
 	const location = useLocation()
-	const { token, status, error } = useSelector((state) => state.auth)
+	const { token, status, error, isSuperAdmin } = useSelector((state) => state.auth)
 
 	const [email, setEmail] = useState('admin@example.com')
 	const [password, setPassword] = useState('admin')
 
 	useEffect(() => {
 		if (token) {
-			const to = location.state?.from?.pathname || '/dashboard'
+			const to = location.state?.from?.pathname || (isSuperAdmin ? '/super-admin' : '/dashboard')
 			navigate(to, { replace: true })
 		}
-	}, [token, navigate, location.state])
+	}, [token, isSuperAdmin, navigate, location.state])
 
 	async function onSubmit(e) {
 		e.preventDefault()
