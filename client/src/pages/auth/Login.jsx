@@ -16,7 +16,10 @@ export default function Login() {
 
 	useEffect(() => {
 		if (token) {
-			const to = location.state?.from?.pathname || (isSuperAdmin ? '/super-admin' : '/dashboard')
+			const from = location.state?.from?.pathname
+			const to = isSuperAdmin
+				? '/super-admin'
+				: (from?.startsWith('/super-admin') ? '/dashboard' : (from || '/dashboard'))
 			navigate(to, { replace: true })
 		}
 	}, [token, isSuperAdmin, navigate, location.state])
@@ -55,7 +58,7 @@ export default function Login() {
 
 				<div className="auth__links">
 					<Link to="/forgot-password">Forgot password?</Link>
-					<Link to="/register">Create account</Link>
+					<span className="muted">Accounts are created by platform super admins.</span>
 				</div>
 			</form>
 		</div>

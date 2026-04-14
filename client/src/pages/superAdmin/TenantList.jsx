@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Button from '../../components/common/Button.jsx'
+import Input from '../../components/common/Input.jsx'
 import Table from '../../components/common/Table.jsx'
 import superAdminService from '../../services/superAdminService'
 
@@ -41,9 +42,55 @@ function TenantRow({ tenant, onRefresh }) {
 
 export default function TenantList() {
 	const [tenants, setTenants] = useState([])
+	const [creating, setCreating] = useState(false)
+	const [createError, setCreateError] = useState(null)
+	const [form, setForm] = useState({
+		name: '',
+		email: '',
+		plan: 'starter',
+		status: 'active',
+		adminName: '',
+		adminEmail: '',
+		adminPassword: '',
+	})
 
 	function refresh() {
 		superAdminService.getTenants().then(setTenants).catch(() => setTenants([]))
+	}
+
+	function onFormChange(key, value) {
+		setForm((prev) => ({ ...prev, [key]: value }))
+	}
+
+	async function onCreateTenant(e) {
+		e.preventDefault()
+		setCreating(true)
+		setCreateError(null)
+		try {
+			await superAdminService.createTenant({
+				name: form.name,
+				email: form.email,
+				plan: form.plan,
+				status: form.status,
+				adminName: form.adminName,
+				adminEmail: form.adminEmail,
+				adminPassword: form.adminPassword,
+			})
+			setForm({
+				name: '',
+				email: '',
+				plan: 'starter',
+				status: 'active',
+				adminName: '',
+				adminEmail: '',
+				adminPassword: '',
+			})
+			refresh()
+		} catch (err) {
+			setCreateError(err?.response?.data?.message || err?.message || 'Failed to create tenant')
+		} finally {
+			setCreating(false)
+		}
 	}
 
 	useEffect(() => {
@@ -61,6 +108,64 @@ export default function TenantList() {
 
 	return (
 		<div className="stack">
+			<form className="card stack" onSubmit={onCreateTenant}>
+				<h3 className="h3">Create Tenant Company</h3>
+				<div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+					<Input
+						label="Company Name"
+						value={form.name}
+						onChange={(e) => onFormChange('name', e.target.value)}
+						required
+					/>
+					<Input
+						label="Company Email"
+						type="email"
+						value={form.email}
+						onChange={(e) => onFormChange('email', e.target.value)}
+						required
+					/>
+					<label className="field">
+						<span className="field__label">Plan</span>
+						<select className="input" value={form.plan} onChange={(e) => onFormChange('plan', e.target.value)}>
+							<option value="starter">starter</option>
+							<option value="pro">pro</option>
+							<option value="enterprise">enterprise</option>
+						</select>
+					</label>
+					<label className="field">
+						<span className="field__label">Status</span>
+						<select className="input" value={form.status} onChange={(e) => onFormChange('status', e.target.value)}>
+							<option value="active">active</option>
+							<option value="trial">trial</option>
+						</select>
+					</label>
+					<Input
+						label="Admin Name"
+						value={form.adminName}
+						onChange={(e) => onFormChange('adminName', e.target.value)}
+						required
+					/>
+					<Input
+						label="Admin Email"
+						type="email"
+						value={form.adminEmail}
+						onChange={(e) => onFormChange('adminEmail', e.target.value)}
+						required
+					/>
+					<Input
+						label="Admin Password"
+						type="password"
+						value={form.adminPassword}
+						onChange={(e) => onFormChange('adminPassword', e.target.value)}
+						required
+					/>
+				</div>
+				{createError ? <div className="error">{createError}</div> : null}
+				<div className="row">
+					<Button type="submit" disabled={creating}>{creating ? 'Creating...' : 'Create tenant account'}</Button>
+				</div>
+			</form>
+
 			<div className="row row--space">
 				<div className="muted">Manage tenant plans and status.</div>
 			</div>

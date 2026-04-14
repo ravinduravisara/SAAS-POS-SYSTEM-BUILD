@@ -7,7 +7,7 @@ async function tenantMiddleware(req, res, next) {
 
 	const { data: tenant, error } = await getSupabase()
 		.from('tenants')
-		.select('id, name, slug, plan, status, trial_ends_at')
+		.select('id, name, slug, plan, status, trial_ends_at, feature_overrides')
 		.eq('id', req.user.tenantId)
 		.single()
 
@@ -27,6 +27,7 @@ async function tenantMiddleware(req, res, next) {
 		slug: tenant.slug,
 		plan: tenant.plan,
 		status: tenant.status,
+		featureOverrides: tenant.feature_overrides || {},
 		trialEndsAt: tenant.trial_ends_at,
 	}
 	next()

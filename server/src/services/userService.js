@@ -1,4 +1,5 @@
 const { getSupabase } = require('../config/db')
+const { hashPassword } = require('../utils/password')
 
 async function list(tenantId) {
 	const { data, error } = await getSupabase()
@@ -25,7 +26,7 @@ async function create(tenantId, payload) {
 			name: payload.name,
 			email: String(payload.email || '').toLowerCase(),
 			role: payload.role || 'cashier',
-			password: payload.password || 'password',
+			password: hashPassword(payload.password || 'password'),
 		})
 		.select()
 		.single()
@@ -44,6 +45,7 @@ async function update(tenantId, userId, payload) {
 	if (payload.name !== undefined) updatePayload.name = payload.name
 	if (payload.email !== undefined) updatePayload.email = String(payload.email || '').toLowerCase()
 	if (payload.role !== undefined) updatePayload.role = payload.role
+	if (payload.password !== undefined) updatePayload.password = hashPassword(payload.password)
 
 	const { data, error } = await getSupabase()
 		.from('users')
