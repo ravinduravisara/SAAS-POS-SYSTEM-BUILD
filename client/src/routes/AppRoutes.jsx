@@ -1,9 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import SuperAdminRoute from './SuperAdminRoute.jsx'
 
 import Login from '../pages/auth/Login.jsx'
-import Register from '../pages/auth/Register.jsx'
 import ForgotPassword from '../pages/auth/ForgotPassword.jsx'
 
 import DashboardLayout from '../components/layout/DashboardLayout.jsx'
@@ -26,13 +26,18 @@ import TenantList from '../pages/superAdmin/TenantList.jsx'
 import TenantDetail from '../pages/superAdmin/TenantDetail.jsx'
 import Subscriptions from '../pages/superAdmin/Subscriptions.jsx'
 
+function RootRedirect() {
+	const { token, isSuperAdmin } = useSelector((state) => state.auth)
+	if (!token) return <Navigate to="/login" replace />
+	return <Navigate to={isSuperAdmin ? '/super-admin' : '/dashboard'} replace />
+}
+
 export default function AppRoutes() {
 	return (
 		<Routes>
-			<Route path="/" element={<Navigate to="/dashboard" replace />} />
+			<Route path="/" element={<RootRedirect />} />
 
 			<Route path="/login" element={<Login />} />
-			<Route path="/register" element={<Register />} />
 			<Route path="/forgot-password" element={<ForgotPassword />} />
 
 			<Route path="/super-admin" element={<SuperAdminRoute />}>

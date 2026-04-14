@@ -1,11 +1,37 @@
-# POS System
+# SAAS POS + ERP Platform
 
-Monorepo with a Vite + React client and an Express server.
+Multi-tenant monorepo with:
+- React + Vite client (`client/`)
+- Express + Supabase backend (`server/`)
 
-## Prereqs
-- Node.js 18+ (recommended: 20+)
+This project is configured for **super-admin-controlled onboarding**:
+- Public registration is disabled
+- Only super admins can create tenant/company accounts
+- Tenant users can only sign in via `/login`
 
-## Run (dev)
+## Prerequisites
+- Node.js 18+ (20+ recommended)
+- A Supabase project
+
+## Environment
+Create `server/.env`:
+
+```env
+PORT=5001
+CORS_ORIGIN=http://localhost:5173
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+JWT_SECRET=replace_with_strong_secret
+```
+
+## Database Setup
+Run SQL from `server/src/db/schema.sql` in Supabase SQL editor.
+
+Important:
+- `tenants.feature_overrides` must exist (used for per-tenant feature toggles)
+- Seed data includes demo super admin and demo tenant account
+
+## Run (Development)
 In two terminals:
 
 ```bash
@@ -16,53 +42,54 @@ npm run dev:server
 npm run dev:client
 ```
 
-- Client: http://localhost:5173
-- Server: http://localhost:5001
+- Client: `http://localhost:5173`
+- Server: `http://localhost:5001`
 
-## Build
+## Production Build
 ```bash
 npm run build:client
+npm run start:server
 ```
 
-## Login
-
-The app uses a single `/login` page for both tenant users and super admins.
-
-- Tenant users are redirected to `/dashboard`
+## Authentication & Access
+- Single login page: `/login`
 - Super admins are redirected to `/super-admin`
+- Tenant users are redirected to `/dashboard`
 
-Demo credentials:
-
-- Tenant admin: `admin@example.com` / `admin`
+Demo credentials from seed SQL:
 - Super admin: `superadmin@posplatform.com` / `superadmin123`
+- Tenant admin: `admin@example.com` / `admin`
 
-## Plans
+Passwords are automatically upgraded to hashed format after successful login.
 
-| Plan | Price | Users | Products | Reports | Multi-location |
-| --- | --- | --- | --- | --- | --- |
-| Starter | $9.99 | 2 | 100 | No | No |
-| Pro | $29.99 | 10 | 1000 | Yes | No |
-| Enterprise | $99.99 | Unlimited | Unlimited | Yes | Yes |
+## Plans & Feature Model
+Plan defaults are defined in `shared/constants/plans.js`.
 
-## Tenant Onboarding
+Each tenant gets:
+- plan-based defaults
+- optional per-tenant overrides (`tenants.feature_overrides`)
 
-Create a new tenant in either of these ways:
+Super admin can enable/disable modules per tenant from:
+- `/super-admin/tenants/:id`
 
-1. Open `/register` and sign up with your name, email, password, store name, and plan.
-2. Sign in as a super admin and create a tenant from `/super-admin/tenants`.
+Backend feature-gated modules include:
+- reports (`reports`)
+- inventory (`inventoryManagement`)
+- purchases (`purchaseManagement`)
+- expenses (`expenseManagement`)
 
-Registration creates the tenant, first admin user, trial subscription, and isolated in-memory collections.
+## Super Admin Workflow
+1. Login as super admin.
+2. Open `/super-admin/tenants`.
+3. Create company tenant with initial tenant admin credentials.
+4. Adjust plan/status.
+5. Toggle tenant features from tenant detail page.
 
-## Supabase Later
+## ERP Expansion
+ERP-ready feature flags are already present:
+- `erpCore`
+- `procurement`
+- `accounting`
+- `hrm`
 
-The app is still using in-memory storage only. When you are ready to connect Supabase later, start by replacing the data access layer in:
-
-- `server/src/data/store.js`
-- `server/src/config/db.js`
-
-Keep the API contract intact so the client can continue using the same auth, tenant, and subscription flow.
-
-## Notes
-
-- The backend currently uses in-memory demo data for a demo tenant plus a super-admin account.
-- Tenant-facing routes are scoped by tenant middleware, and reports are additionally gated by the active plan.
+Use these flags to progressively enable ERP modules in UI/routes/services as new features are added.

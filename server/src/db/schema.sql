@@ -16,9 +16,13 @@ create table if not exists tenants (
   email       text unique not null,
   plan        text not null default 'starter' check (plan in ('starter', 'pro', 'enterprise')),
   status      text not null default 'trial' check (status in ('active', 'trial', 'suspended', 'cancelled')),
+  feature_overrides jsonb not null default '{}'::jsonb,
   trial_ends_at timestamptz,
   created_at  timestamptz default now()
 );
+
+alter table if exists tenants
+  add column if not exists feature_overrides jsonb not null default '{}'::jsonb;
 
 create table if not exists tenant_settings (
   id          text primary key default 'ts_' || gen_random_uuid(),

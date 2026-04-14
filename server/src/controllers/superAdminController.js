@@ -1,4 +1,13 @@
 const { getSupabase } = require('../config/db')
+const { PLAN_FEATURES } = require('../../../shared/constants/plans')
+const { resolvePlanFeatures, sanitizeFeatureOverrides } = require('../utils/planFeatures')
+const { hashPassword } = require('../utils/password')
+
+const PLAN_PRICES = {
+	starter: 9.99,
+	pro: 29.99,
+	enterprise: 99.99,
+}
 
 function mapTenant(tenant) {
 	if (!tenant) return tenant
@@ -9,6 +18,7 @@ function mapTenant(tenant) {
 		email: tenant.email,
 		plan: tenant.plan,
 		status: tenant.status,
+		featureOverrides: tenant.feature_overrides || {},
 		trialEndsAt: tenant.trial_ends_at,
 		createdAt: tenant.created_at,
 	}
@@ -55,6 +65,7 @@ async function listTenants(req, res, next) {
 
 			return {
 				...mapTenant(tenant),
+				planFeatures: resolvePlanFeatures(tenant.plan, tenant.feature_overrides || {}),
 				userCount: count || 0,
 				subscription: mapSubscription(latestSub),
 			}
@@ -101,6 +112,7 @@ async function getTenant(req, res, next) {
 
 		res.json({
 			...mapTenant(tenant),
+			planFeatures: resolvePlanFeatures(tenant.plan, tenant.feature_overrides || {}),
 			users: (users || []).map((user) => ({
 				id: user.id,
 				tenantId: user.tenant_id,
@@ -126,15 +138,41 @@ async function createTenant(req, res, next) {
 	try {
 		const db = getSupabase()
 		const payload = req.body || {}
+		const plan = PLAN_FEATURES[payload.plan] ? payload.plan : 'starter'
+		const allowedStatuses = new Set(['active', 'trial', 'suspended', 'cancelled'])
+		const status = allowedStatuses.has(payload.status) ? payload.status : 'active'
+		const tenantEmail = String(payload.email || '').toLowerCase()
+		const adminEmail = String(payload.adminEmail || tenantEmail || '').toLowerCase()
+
+		if (!tenantEmail) {
+			return res.status(400).json({ message: 'Tenant email is required' })
+		}
+
+		if (!adminEmail || !payload.adminPassword) {
+			return res.status(400).json({ message: 'Admin email and password are required' })
+		}
+
+		const { data: existingUser, error: existingUserError } = await db
+			.from('users')
+			.select('id')
+			.eq('email', adminEmail)
+			.maybeSingle()
+		if (existingUserError) throw existingUserError
+		if (existingUser) {
+			return res.status(409).json({ message: 'Admin email already in use' })
+		}
+
+		const featureOverrides = sanitizeFeatureOverrides(plan, payload.featureOverrides || {})
 		const { data: tenant, error } = await db
 			.from('tenants')
 			.insert({
 				name: payload.name || payload.storeName || 'Tenant',
 				slug: payload.slug || `${String(payload.name || payload.storeName || 'tenant').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
-				email: String(payload.email || '').toLowerCase(),
-				plan: payload.plan || 'starter',
-				status: payload.status || 'active',
+				email: tenantEmail,
+				plan,
+				status,
 				trial_ends_at: payload.trialEndsAt || null,
+				feature_overrides: featureOverrides,
 			})
 			.select()
 			.single()
@@ -151,7 +189,31 @@ async function createTenant(req, res, next) {
 			})
 		if (settingsError) throw settingsError
 
-		res.status(201).json(mapTenant(tenant))
+		const { error: subscriptionError } = await db
+			.from('subscriptions')
+			.insert({
+				tenant_id: tenant.id,
+				plan,
+				status: status === 'active' ? 'active' : 'trial',
+				amount: PLAN_PRICES[plan] || PLAN_PRICES.starter,
+			})
+		if (subscriptionError) throw subscriptionError
+
+		const { error: userError } = await db
+			.from('users')
+			.insert({
+				tenant_id: tenant.id,
+				name: payload.adminName || payload.name || 'Tenant Admin',
+				email: adminEmail,
+				password: hashPassword(String(payload.adminPassword || '')),
+				role: 'admin',
+			})
+		if (userError) throw userError
+
+		res.status(201).json({
+			...mapTenant(tenant),
+			planFeatures: resolvePlanFeatures(plan, featureOverrides),
+		})
 	} catch (err) {
 		next(err)
 	}
@@ -160,7 +222,11 @@ async function createTenant(req, res, next) {
 async function updateTenantStatus(req, res, next) {
 	try {
 		const db = getSupabase()
-		const { status } = req.body || {}
+		const allowedStatuses = new Set(['active', 'trial', 'suspended', 'cancelled'])
+		const status = req.body?.status
+		if (!allowedStatuses.has(status)) {
+			return res.status(400).json({ message: 'Invalid tenant status' })
+		}
 		const { data, error } = await db
 			.from('tenants')
 			.update({ status })
@@ -177,15 +243,68 @@ async function updateTenantStatus(req, res, next) {
 async function updateTenantPlan(req, res, next) {
 	try {
 		const db = getSupabase()
-		const { plan } = req.body || {}
-		const { error: tenantError } = await db.from('tenants').update({ plan }).eq('id', req.params.id)
+		const requestedPlan = req.body?.plan
+		const plan = PLAN_FEATURES[requestedPlan] ? requestedPlan : 'starter'
+		const { data: currentTenant, error: currentTenantError } = await db
+			.from('tenants')
+			.select('id, plan, feature_overrides')
+			.eq('id', req.params.id)
+			.single()
+		if (currentTenantError || !currentTenant) {
+			return res.status(404).json({ message: 'Tenant not found' })
+		}
+
+		const safeOverrides = sanitizeFeatureOverrides(plan, currentTenant.feature_overrides || {})
+		const { error: tenantError } = await db
+			.from('tenants')
+			.update({ plan, feature_overrides: safeOverrides })
+			.eq('id', req.params.id)
 		if (tenantError) throw tenantError
 		const { error: subscriptionError } = await db.from('subscriptions').update({ plan }).eq('tenant_id', req.params.id)
 		if (subscriptionError) throw subscriptionError
 
 		const { data, error } = await db.from('tenants').select('*').eq('id', req.params.id).single()
 		if (error) throw error
-		res.json(mapTenant(data))
+		res.json({
+			...mapTenant(data),
+			planFeatures: resolvePlanFeatures(data.plan, data.feature_overrides || {}),
+		})
+	} catch (err) {
+		next(err)
+	}
+}
+
+async function updateTenantFeatures(req, res, next) {
+	try {
+		const db = getSupabase()
+		const tenantId = req.params.id
+		const { data: tenant, error: tenantError } = await db
+			.from('tenants')
+			.select('id, plan, feature_overrides')
+			.eq('id', tenantId)
+			.single()
+		if (tenantError || !tenant) {
+			return res.status(404).json({ message: 'Tenant not found' })
+		}
+
+		const mergedOverrides = {
+			...(tenant.feature_overrides || {}),
+			...((req.body && typeof req.body.featureOverrides === 'object' && req.body.featureOverrides) || {}),
+		}
+		const featureOverrides = sanitizeFeatureOverrides(tenant.plan, mergedOverrides)
+
+		const { data, error } = await db
+			.from('tenants')
+			.update({ feature_overrides: featureOverrides })
+			.eq('id', tenantId)
+			.select('*')
+			.single()
+		if (error) throw error
+
+		res.json({
+			...mapTenant(data),
+			planFeatures: resolvePlanFeatures(data.plan, data.feature_overrides || {}),
+		})
 	} catch (err) {
 		next(err)
 	}
@@ -279,6 +398,7 @@ module.exports = {
 	createTenant,
 	updateTenantStatus,
 	updateTenantPlan,
+	updateTenantFeatures,
 	deleteTenant,
 	listSubscriptions,
 	updateSubscription,
