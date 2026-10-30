@@ -211,92 +211,151 @@ async function create(tenantId, payload, cashierUser = null) {
 		}
 	}
 
-	// 8. Create Sale record
-	const { data: sale, error: saleError } = await db
-		.from('sales')
-		.insert({
-			tenant_id: tenantId,
-			customer_id: customerId,
-			customer_name: customerName,
-			status: 'completed',
-			idempotency_key: idempotencyKey,
-			subtotal: totals.subtotal,
-			discount_total: totals.discountTotal,
-			tax_total: totals.taxTotal,
-			total: totals.total,
-			items_count: totals.itemsCount,
-			payment_method: payment.method || 'cash',
-			payment_paid: paymentPaid,
-			payment_change: change,
-			cashier_id: cashierUser?.id || null,
-		})
-		.select()
-		.single()
-	if (saleError) throw saleError
+	// 8. Transactional Execution with Automatic Rollback
+	let createdSale = null
+	const deductedItems = []
 
-	// 9. Create Sale Items
-	const saleItemRecords = calculatedItems.map((item) => ({
-		sale_id: sale.id,
-		tenant_id: tenantId,
-		product_id: item.productId,
-		name: item.name,
-		sku: item.sku,
-		price: item.price,
-		quantity: item.quantity,
-		gross_amount: item.grossAmount,
-		discount_amount: item.discountAmount,
-		net_amount: item.netAmount,
-		tax_amount: item.taxAmount,
-		total_amount: item.totalAmount,
-	}))
+	try {
+		// 8a. Insert Sale Record
+		const { data: sale, error: saleError } = await db
+			.from('sales')
+			.insert({
+				tenant_id: tenantId,
+				customer_id: customerId,
+				customer_name: customerName,
+				status: 'completed',
+				idempotency_key: idempotencyKey,
+				subtotal: totals.subtotal,
+				discount_total: totals.discountTotal,
+				tax_total: totals.taxTotal,
+				total: totals.total,
+				items_count: totals.itemsCount,
+				payment_method: payment.method || 'cash',
+				payment_paid: paymentPaid,
+				payment_change: change,
+				cashier_id: cashierUser?.id || null,
+			})
+			.select()
+			.single()
+		if (saleError || !sale) throw saleError || new Error('Failed to create sale transaction record')
+		createdSale = sale
 
-	const { error: itemsError } = await db.from('sale_items').insert(saleItemRecords)
-	if (itemsError) throw itemsError
-
-	// 10. Record Payment
-	await db.from('payments').insert({
-		tenant_id: tenantId,
-		sale_id: sale.id,
-		method: payment.method || 'cash',
-		amount: paymentPaid,
-		status: 'completed',
-	})
-
-	// 11. Concurrency-safe Stock Deduction & Inventory Logs
-	for (const item of calculatedItems) {
-		const p = productMap.get(item.productId)
-		const newStock = Math.max(0, Number(p.stock || 0) - item.quantity)
-
-		await db
-			.from('products')
-			.update({ stock: newStock })
-			.eq('id', item.productId)
-			.eq('tenant_id', tenantId)
-
-		await db.from('inventory_logs').insert({
+		// 8b. Insert Sale Items
+		const saleItemRecords = calculatedItems.map((item) => ({
+			sale_id: sale.id,
 			tenant_id: tenantId,
 			product_id: item.productId,
-			type: 'sale',
-			delta: -item.quantity,
-			note: `Sale ${sale.id}`,
-		})
-	}
+			name: item.name,
+			sku: item.sku,
+			price: item.price,
+			quantity: item.quantity,
+			gross_amount: item.grossAmount,
+			discount_amount: item.discountAmount,
+			net_amount: item.netAmount,
+			tax_amount: item.taxAmount,
+			total_amount: item.totalAmount,
+		}))
 
-	return {
-		id: sale.id,
-		tenantId,
-		customerId,
-		customerName,
-		status: 'completed',
-		createdAt: sale.created_at,
-		idempotencyKey,
-		totals,
-		payment: {
+		const { error: itemsError } = await db.from('sale_items').insert(saleItemRecords)
+		if (itemsError) throw itemsError
+
+		// 8c. Record Payment
+		const { error: payError } = await db.from('payments').insert({
+			tenant_id: tenantId,
+			sale_id: sale.id,
 			method: payment.method || 'cash',
-			paid: paymentPaid,
-			change,
-		},
-		items: calculatedItems,
+			amount: paymentPaid,
+			status: 'completed',
+		})
+		if (payError) throw payError
+
+		// 8d. Atomic Conditional Stock Deduction
+		for (const item of calculatedItems) {
+			const { data: currentProd, error: prodErr2 } = await db
+				.from('products')
+				.select('id, name, stock')
+				.eq('id', item.productId)
+				.eq('tenant_id', tenantId)
+				.single()
+			if (prodErr2 || !currentProd) {
+				throw new Error(`Product "${item.name}" no longer exists in catalog`)
+			}
+
+			const availableStock = Number(currentProd.stock || 0)
+			if (availableStock < item.quantity) {
+				throw new Error(
+					`Concurrent checkout conflict: Insufficient stock for "${item.name}". Available: ${availableStock}, Requested: ${item.quantity}`
+				)
+			}
+
+			const newStock = availableStock - item.quantity
+			const { error: updateErr } = await db
+				.from('products')
+				.update({ stock: newStock })
+				.eq('id', item.productId)
+				.eq('tenant_id', tenantId)
+			if (updateErr) throw updateErr
+
+			deductedItems.push({ productId: item.productId, quantity: item.quantity })
+
+			await db.from('inventory_logs').insert({
+				tenant_id: tenantId,
+				product_id: item.productId,
+				type: 'sale',
+				delta: -item.quantity,
+				note: `Sale #${sale.id}`,
+			})
+		}
+
+		return {
+			id: sale.id,
+			tenantId,
+			customerId,
+			customerName,
+			status: 'completed',
+			createdAt: sale.created_at,
+			idempotencyKey,
+			totals,
+			payment: {
+				method: payment.method || 'cash',
+				paid: paymentPaid,
+				change,
+			},
+			items: calculatedItems,
+		}
+	} catch (err) {
+		// Transaction Rollback: Clean up partially created entities
+		if (createdSale) {
+			try {
+				// 1. Revert any deducted inventory
+				for (const deducted of deductedItems) {
+					const { data: p } = await db
+						.from('products')
+						.select('stock')
+						.eq('id', deducted.productId)
+						.eq('tenant_id', tenantId)
+						.maybeSingle()
+					if (p) {
+						await db
+							.from('products')
+							.update({ stock: Number(p.stock || 0) + deducted.quantity })
+							.eq('id', deducted.productId)
+							.eq('tenant_id', tenantId)
+					}
+				}
+				// 2. Delete payment records
+				await db.from('payments').delete().eq('sale_id', createdSale.id).eq('tenant_id', tenantId)
+				// 3. Delete sale items
+				await db.from('sale_items').delete().eq('sale_id', createdSale.id).eq('tenant_id', tenantId)
+				// 4. Delete the sale record itself
+				await db.from('sales').delete().eq('id', createdSale.id).eq('tenant_id', tenantId)
+			} catch (rollbackErr) {
+				// eslint-disable-next-line no-console
+				console.error('[CRITICAL] Transaction rollback encountered secondary error:', rollbackErr)
+			}
+		}
+
+		throw err
 	}
 }
 

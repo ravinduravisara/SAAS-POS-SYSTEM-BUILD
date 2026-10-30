@@ -40,6 +40,20 @@ app.use(express.json())
 
 app.get('/health', (req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }))
 
+app.get('/ready', async (req, res) => {
+	try {
+		const { getSupabase } = require('./config/db')
+		const db = getSupabase()
+		const { error } = await db.from('tenants').select('id').limit(1)
+		if (error && error.code !== 'PGRST116') {
+			return res.status(503).json({ ok: false, status: 'unhealthy', error: 'Database query failed' })
+		}
+		return res.json({ ok: true, status: 'ready', timestamp: new Date().toISOString() })
+	} catch (err) {
+		return res.status(503).json({ ok: false, status: 'unhealthy', error: err.message })
+	}
+})
+
 // General API rate limiter
 app.use('/api', apiLimiter)
 
