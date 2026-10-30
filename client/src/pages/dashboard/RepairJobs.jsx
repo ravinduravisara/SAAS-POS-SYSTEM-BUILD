@@ -1,6 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import DataTable from '../../components/common/DataTable.jsx'
+import StatusBadge from '../../components/common/StatusBadge.jsx'
+import Button from '../../components/common/Button.jsx'
+import Modal from '../../components/common/Modal.jsx'
+import Input from '../../components/common/Input.jsx'
 import { getRepairJobs, createRepairJob, updateJobStatus } from '../../services/repairsService'
 import { getProducts } from '../../services/productService'
+import { formatCurrency } from '../../utils/formatCurrency'
 
 export default function RepairJobs() {
 	const [jobs, setJobs] = useState([])
@@ -9,6 +16,7 @@ export default function RepairJobs() {
 	const [statusFilter, setStatusFilter] = useState('')
 	const [error, setError] = useState('')
 	const [successMsg, setSuccessMsg] = useState('')
+	const [searchQuery, setSearchQuery] = useState('')
 
 	// Modal state
 	const [showModal, setShowModal] = useState(false)
@@ -45,7 +53,7 @@ export default function RepairJobs() {
 		loadData()
 	}, [loadData])
 
-	const handleStatusChange = async (jobId, newStatus) => {
+	const handleStatusChange = useCallback(async (jobId, newStatus) => {
 		try {
 			await updateJobStatus(jobId, newStatus)
 			setSuccessMsg(`Job #${jobId} status updated to ${newStatus}`)
@@ -54,7 +62,7 @@ export default function RepairJobs() {
 		} catch (err) {
 			setError(err.response?.data?.message || err.message)
 		}
-	}
+	}, [loadData])
 
 	const handleSubmit = async (e) => {
 		e.preventDefault()
@@ -103,260 +111,274 @@ export default function RepairJobs() {
 		}
 	}
 
+	const filteredJobs = useMemo(() => {
+		if (!searchQuery.trim()) return jobs
+		const q = searchQuery.toLowerCase()
+		return jobs.filter(
+			(j) =>
+				j.customerName?.toLowerCase().includes(q) ||
+				j.customerPhone?.toLowerCase().includes(q) ||
+				j.deviceModel?.toLowerCase().includes(q) ||
+				j.serialNumber?.toLowerCase().includes(q) ||
+				j.technicianName?.toLowerCase().includes(q),
+		)
+	}, [jobs, searchQuery])
+
+	const columns = useMemo(
+		() => [
+			{
+				label: 'Customer Details',
+				key: 'customerName',
+				render: (row) => (
+					<div>
+						<div style={{ fontWeight: 600, color: '#0f172a' }}>{row.customerName}</div>
+						<div style={{ fontSize: '0.8rem', color: '#64748b' }}>{row.customerPhone}</div>
+					</div>
+				),
+			},
+			{
+				label: 'Device & Hardware',
+				key: 'deviceModel',
+				render: (row) => (
+					<div>
+						<div style={{ fontWeight: 500, color: '#0f172a' }}>{row.deviceModel}</div>
+						{row.serialNumber && (
+							<div style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#64748b' }}>
+								S/N: {row.serialNumber}
+							</div>
+						)}
+					</div>
+				),
+			},
+			{
+				label: 'Diagnosis / Issue',
+				key: 'problemDescription',
+				render: (row) => (
+					<div style={{ fontSize: '0.85rem', color: '#334155', maxWidth: '220px' }}>
+						{row.problemDescription}
+					</div>
+				),
+			},
+			{
+				label: 'Assigned Tech',
+				key: 'technicianName',
+				render: (row) => (
+					<span style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 500 }}>
+						{row.technicianName || 'Unassigned'}
+					</span>
+				),
+			},
+			{
+				label: 'Total Cost',
+				key: 'totalCost',
+				render: (row) => (
+					<div>
+						<div style={{ fontWeight: 700, color: '#0f172a' }}>
+							{formatCurrency(row.totalCost || 0)}
+						</div>
+						<div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+							Labor: {formatCurrency(row.laborCost || 0)} | Parts: {formatCurrency(row.partsCost || 0)}
+						</div>
+					</div>
+				),
+			},
+			{
+				label: 'Status',
+				key: 'status',
+				render: (row) => {
+					const s = row.status
+					if (s === 'delivered') return <StatusBadge status="success" label="Delivered" />
+					if (s === 'completed') return <StatusBadge status="primary" label="Completed" />
+					if (s === 'repairing') return <StatusBadge status="warning" label="In Repair" />
+					return <StatusBadge status="info" label="Received" />
+				},
+			},
+			{
+				label: 'Actions',
+				key: 'actions',
+				width: '140px',
+				render: (row) => (
+					<div>
+						{row.status === 'received' && (
+							<Button
+								variant="secondary"
+								size="sm"
+								onClick={() => handleStatusChange(row.id, 'repairing')}
+							>
+								Start Repair
+							</Button>
+						)}
+						{row.status === 'repairing' && (
+							<Button
+								size="sm"
+								onClick={() => handleStatusChange(row.id, 'completed')}
+							>
+								Complete Job
+							</Button>
+						)}
+						{row.status === 'completed' && (
+							<Button
+								variant="secondary"
+								size="sm"
+								onClick={() => handleStatusChange(row.id, 'delivered')}
+							>
+								Deliver to Client
+							</Button>
+						)}
+					</div>
+				),
+			},
+		],
+		[handleStatusChange],
+	)
+
 	return (
-		<div className="pos-screen" style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-				<div>
-					<h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Service Center & Repair Job Cards</h1>
-					<p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-						Manage customer device diagnostics, work orders, technician assignments, and automatic spare part inventory deduction.
-					</p>
-				</div>
-				<button type="button" className="btn btn--primary" onClick={() => setShowModal(true)}>
-					+ Create Job Card
-				</button>
-			</div>
+		<div className="stack">
+			<PageHeader
+				title="Service Center & Repair Job Cards"
+				subtitle="Manage device diagnostics, service orders, technician dispatch, and automated spare parts deduction."
+				actions={
+					<Button onClick={() => setShowModal(true)}>+ Register Job Card</Button>
+				}
+			/>
 
 			{error && (
-				<div style={{ padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', marginBottom: '1rem' }}>
+				<div className="card" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }}>
 					{error}
 				</div>
 			)}
 			{successMsg && (
-				<div style={{ padding: '0.75rem 1rem', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', borderRadius: '6px', marginBottom: '1rem' }}>
+				<div className="card" style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a' }}>
 					{successMsg}
 				</div>
 			)}
 
-			<div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-				<label style={{ fontSize: '0.875rem', fontWeight: 600 }}>Filter by Status:</label>
-				<select
-					value={statusFilter}
-					onChange={(e) => setStatusFilter(e.target.value)}
-					style={{ padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-				>
-					<option value="">All Statuses</option>
-					<option value="received">Received</option>
-					<option value="repairing">Repairing</option>
-					<option value="completed">Completed</option>
-					<option value="delivered">Delivered</option>
-				</select>
+			<div className="card" style={{ padding: '1.25rem' }}>
+				<DataTable
+					columns={columns}
+					data={filteredJobs}
+					loading={loading}
+					searchQuery={searchQuery}
+					onSearchChange={setSearchQuery}
+					searchPlaceholder="Search repair job by customer, device, or serial #..."
+					actions={
+						<select
+							className="input"
+							value={statusFilter}
+							onChange={(e) => setStatusFilter(e.target.value)}
+							style={{ width: '160px', padding: '0.45rem 0.6rem' }}
+						>
+							<option value="">All Statuses</option>
+							<option value="received">Received</option>
+							<option value="repairing">Repairing</option>
+							<option value="completed">Completed</option>
+							<option value="delivered">Delivered</option>
+						</select>
+					}
+					emptyTitle="No repair jobs found"
+					emptyDescription="No repair job cards registered yet or matching your filter."
+					emptyActionText="+ Register Job Card"
+					onEmptyAction={() => setShowModal(true)}
+				/>
 			</div>
 
-			{loading ? (
-				<p>Loading repair jobs...</p>
-			) : jobs.length === 0 ? (
-				<div style={{ padding: '2rem', textAlign: 'center', background: '#f8fafc', borderRadius: '8px' }}>
-					<p style={{ color: '#64748b' }}>No repair jobs recorded. Click &quot;+ Create Job Card&quot; to begin.</p>
-				</div>
-			) : (
-				<div style={{ overflowX: 'auto', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-					<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-						<thead>
-							<tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-								<th style={{ padding: '0.75rem 1rem' }}>Customer & Phone</th>
-								<th style={{ padding: '0.75rem 1rem' }}>Device & Serial</th>
-								<th style={{ padding: '0.75rem 1rem' }}>Problem Description</th>
-								<th style={{ padding: '0.75rem 1rem' }}>Technician</th>
-								<th style={{ padding: '0.75rem 1rem' }}>Cost Breakdown</th>
-								<th style={{ padding: '0.75rem 1rem' }}>Status</th>
-								<th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							{jobs.map((j) => (
-								<tr key={j.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-									<td style={{ padding: '0.75rem 1rem' }}>
-										<div style={{ fontWeight: 600 }}>{j.customerName}</div>
-										<div style={{ color: '#64748b', fontSize: '0.8rem' }}>{j.customerPhone}</div>
-									</td>
-									<td style={{ padding: '0.75rem 1rem' }}>
-										<div>{j.deviceModel}</div>
-										{j.serialNumber && <div style={{ color: '#64748b', fontSize: '0.75rem' }}>S/N: {j.serialNumber}</div>}
-									</td>
-									<td style={{ padding: '0.75rem 1rem', maxWidth: '250px' }}>{j.problemDescription}</td>
-									<td style={{ padding: '0.75rem 1rem' }}>{j.technicianName}</td>
-									<td style={{ padding: '0.75rem 1rem' }}>
-										<div>Rs. {Number(j.totalCost || 0).toLocaleString()}</div>
-										<div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-											Labor: Rs. {j.laborCost} | Parts: Rs. {j.partsCost}
-										</div>
-									</td>
-									<td style={{ padding: '0.75rem 1rem' }}>
-										<span
-											style={{
-												padding: '0.2rem 0.5rem',
-												borderRadius: '12px',
-												fontSize: '0.75rem',
-												fontWeight: 600,
-												textTransform: 'uppercase',
-												background: j.status === 'completed' || j.status === 'delivered' ? '#d1fae5' : '#fee2e2',
-												color: j.status === 'completed' || j.status === 'delivered' ? '#047857' : '#b91c1c',
-											}}
-										>
-											{j.status}
-										</span>
-									</td>
-									<td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-										{j.status === 'received' && (
-											<button
-												type="button"
-												className="btn btn--secondary"
-												style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-												onClick={() => handleStatusChange(j.id, 'repairing')}
-											>
-												Start Repair
-											</button>
-										)}
-										{j.status === 'repairing' && (
-											<button
-												type="button"
-												className="btn btn--primary"
-												style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-												onClick={() => handleStatusChange(j.id, 'completed')}
-											>
-												Complete & Restock
-											</button>
-										)}
-										{j.status === 'completed' && (
-											<button
-												type="button"
-												className="btn btn--secondary"
-												style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-												onClick={() => handleStatusChange(j.id, 'delivered')}
-											>
-												Deliver to Client
-											</button>
-										)}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			)}
-
 			{/* New Job Modal */}
-			{showModal && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-					<div style={{ background: '#ffffff', borderRadius: '8px', padding: '1.5rem', width: '100%', maxWidth: '520px' }}>
-						<h2 style={{ margin: 0, fontSize: '1.25rem', marginBottom: '1rem' }}>Register Repair Job Card</h2>
-						<form onSubmit={handleSubmit}>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Customer Name *</label>
-									<input
-										type="text"
-										required
-										value={form.customerName}
-										onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Customer Phone</label>
-									<input
-										type="text"
-										value={form.customerPhone}
-										onChange={(e) => setForm({ ...form, customerPhone: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Device Model *</label>
-									<input
-										type="text"
-										required
-										placeholder="e.g. Dell XPS 15"
-										value={form.deviceModel}
-										onChange={(e) => setForm({ ...form, deviceModel: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Serial / IMEI</label>
-									<input
-										type="text"
-										value={form.serialNumber}
-										onChange={(e) => setForm({ ...form, serialNumber: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-
-							<div style={{ marginBottom: '0.75rem' }}>
-								<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Problem Description</label>
-								<textarea
-									rows="2"
-									value={form.problemDescription}
-									onChange={(e) => setForm({ ...form, problemDescription: e.target.value })}
-									style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-								/>
-							</div>
-
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Technician</label>
-									<input
-										type="text"
-										value={form.technicianName}
-										onChange={(e) => setForm({ ...form, technicianName: e.target.value })}
-										placeholder="e.g. Kamal"
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Labor Cost (Rs.)</label>
-									<input
-										type="number"
-										step="any"
-										value={form.laborCost}
-										onChange={(e) => setForm({ ...form, laborCost: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-
-							<div style={{ marginBottom: '1rem' }}>
-								<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Spare Part from Inventory</label>
-								<div style={{ display: 'flex', gap: '0.5rem' }}>
-									<select
-										value={form.selectedPartId}
-										onChange={(e) => setForm({ ...form, selectedPartId: e.target.value })}
-										style={{ flex: 1, padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									>
-										<option value="">No part selected</option>
-										{products.map((p) => (
-											<option key={p.id} value={p.id}>
-												{p.name} (Stock: {p.stock} | Rs. {p.price})
-											</option>
-										))}
-									</select>
-									<input
-										type="number"
-										min="1"
-										value={form.partQty}
-										onChange={(e) => setForm({ ...form, partQty: e.target.value })}
-										style={{ width: '60px', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-
-							<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-								<button type="button" className="btn btn--secondary" onClick={() => setShowModal(false)}>
-									Cancel
-								</button>
-								<button type="submit" className="btn btn--primary">
-									Register Job
-								</button>
-							</div>
-						</form>
+			<Modal
+				title="Register Repair Job Card"
+				open={showModal}
+				onClose={() => setShowModal(false)}
+			>
+				<form onSubmit={handleSubmit} className="stack">
+					<div className="grid grid--2">
+						<Input
+							label="Customer Name"
+							placeholder="e.g. Priyantha Silva"
+							required
+							value={form.customerName}
+							onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+						/>
+						<Input
+							label="Contact Phone"
+							placeholder="077xxxxxxx"
+							value={form.customerPhone}
+							onChange={(e) => setForm({ ...form, customerPhone: e.target.value })}
+						/>
 					</div>
-				</div>
-			)}
+
+					<div className="grid grid--2">
+						<Input
+							label="Device Model"
+							placeholder="e.g. MacBook Pro M1 14&quot;"
+							required
+							value={form.deviceModel}
+							onChange={(e) => setForm({ ...form, deviceModel: e.target.value })}
+						/>
+						<Input
+							label="Serial # / IMEI"
+							placeholder="e.g. C02ABC123DEF"
+							value={form.serialNumber}
+							onChange={(e) => setForm({ ...form, serialNumber: e.target.value })}
+						/>
+					</div>
+
+					<Input
+						label="Problem Description / Symptoms"
+						placeholder="e.g. Display backlight flickering, battery drains fast"
+						value={form.problemDescription}
+						onChange={(e) => setForm({ ...form, problemDescription: e.target.value })}
+					/>
+
+					<div className="grid grid--2">
+						<Input
+							label="Assigned Technician"
+							placeholder="e.g. Kamal"
+							value={form.technicianName}
+							onChange={(e) => setForm({ ...form, technicianName: e.target.value })}
+						/>
+						<Input
+							label="Labor Cost"
+							type="number"
+							step="any"
+							value={form.laborCost}
+							onChange={(e) => setForm({ ...form, laborCost: e.target.value })}
+						/>
+					</div>
+
+					<div>
+						<label className="label">Spare Part from Stock (Auto-Deducts on Save)</label>
+						<div style={{ display: 'flex', gap: '8px' }}>
+							<select
+								className="input"
+								value={form.selectedPartId}
+								onChange={(e) => setForm({ ...form, selectedPartId: e.target.value })}
+								style={{ flex: 1 }}
+							>
+								<option value="">No spare part required</option>
+								{products.map((p) => (
+									<option key={p.id} value={p.id}>
+										{p.name} (Stock: {p.stock} | {formatCurrency(p.price || 0)})
+									</option>
+								))}
+							</select>
+							<input
+								type="number"
+								min="1"
+								value={form.partQty}
+								onChange={(e) => setForm({ ...form, partQty: e.target.value })}
+								className="input"
+								style={{ width: '70px' }}
+							/>
+						</div>
+					</div>
+
+					<div className="row row--space" style={{ marginTop: '1rem' }}>
+						<Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
+							Cancel
+						</Button>
+						<Button type="submit">Create Job Card</Button>
+					</div>
+				</form>
+			</Modal>
 		</div>
 	)
 }

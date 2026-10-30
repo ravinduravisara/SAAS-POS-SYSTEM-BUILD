@@ -1,4 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import DataTable from '../../components/common/DataTable.jsx'
+import StatusBadge from '../../components/common/StatusBadge.jsx'
+import Button from '../../components/common/Button.jsx'
+import Modal from '../../components/common/Modal.jsx'
+import Input from '../../components/common/Input.jsx'
 import {
 	getEmployees,
 	createEmployee,
@@ -8,6 +14,7 @@ import {
 	generatePayroll,
 	markPayrollPaid,
 } from '../../services/hrmService'
+import { formatCurrency } from '../../utils/formatCurrency'
 
 export default function HRMManagement() {
 	const [activeTab, setActiveTab] = useState('employees') // 'employees' | 'attendance' | 'payroll'
@@ -17,6 +24,11 @@ export default function HRMManagement() {
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState('')
 	const [successMsg, setSuccessMsg] = useState('')
+
+	// Search states
+	const [empSearch, setEmpSearch] = useState('')
+	const [attSearch, setAttSearch] = useState('')
+	const [paySearch, setPaySearch] = useState('')
 
 	// Modals
 	const [showEmpModal, setShowEmpModal] = useState(false)
@@ -44,7 +56,7 @@ export default function HRMManagement() {
 		deductions: 0,
 	})
 
-	const loadData = async () => {
+	const loadData = useCallback(async () => {
 		try {
 			setLoading(true)
 			setError('')
@@ -61,11 +73,11 @@ export default function HRMManagement() {
 		} finally {
 			setLoading(false)
 		}
-	}
+	}, [])
 
 	useEffect(() => {
 		loadData()
-	}, [])
+	}, [loadData])
 
 	const handleAddEmployee = async (e) => {
 		e.preventDefault()
@@ -123,7 +135,7 @@ export default function HRMManagement() {
 		}
 	}
 
-	const handlePaySlip = async (id) => {
+	const handlePaySlip = useCallback(async (id) => {
 		try {
 			await markPayrollPaid(id)
 			setSuccessMsg('Payroll status marked as Paid')
@@ -132,398 +144,477 @@ export default function HRMManagement() {
 		} catch (err) {
 			setError(err.response?.data?.message || err.message)
 		}
-	}
+	}, [loadData])
+
+	// Filtered data
+	const filteredEmployees = useMemo(() => {
+		if (!empSearch.trim()) return employees
+		const q = empSearch.toLowerCase()
+		return employees.filter(
+			(e) =>
+				e.name?.toLowerCase().includes(q) ||
+				e.role?.toLowerCase().includes(q) ||
+				e.department?.toLowerCase().includes(q),
+		)
+	}, [employees, empSearch])
+
+	const filteredAttendance = useMemo(() => {
+		if (!attSearch.trim()) return attendance
+		const q = attSearch.toLowerCase()
+		return attendance.filter(
+			(a) =>
+				a.employeeName?.toLowerCase().includes(q) ||
+				a.date?.toLowerCase().includes(q) ||
+				a.status?.toLowerCase().includes(q),
+		)
+	}, [attendance, attSearch])
+
+	const filteredPayroll = useMemo(() => {
+		if (!paySearch.trim()) return payroll
+		const q = paySearch.toLowerCase()
+		return payroll.filter(
+			(p) =>
+				p.employeeName?.toLowerCase().includes(q) ||
+				p.monthYear?.toLowerCase().includes(q) ||
+				p.status?.toLowerCase().includes(q),
+		)
+	}, [payroll, paySearch])
+
+	const employeeColumns = useMemo(
+		() => [
+			{
+				label: 'Employee Name',
+				key: 'name',
+				render: (row) => (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+						<div
+							style={{
+								width: '32px',
+								height: '32px',
+								borderRadius: '50%',
+								backgroundColor: '#e0e7ff',
+								color: '#4338ca',
+								fontWeight: 700,
+								fontSize: '0.8rem',
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+							}}
+						>
+							{row.name ? row.name.charAt(0).toUpperCase() : 'E'}
+						</div>
+						<span style={{ fontWeight: 600, color: '#0f172a' }}>{row.name}</span>
+					</div>
+				),
+			},
+			{
+				label: 'Role & Department',
+				key: 'role',
+				render: (row) => (
+					<div>
+						<div style={{ color: '#0f172a', fontWeight: 500 }}>{row.role}</div>
+						<div style={{ fontSize: '0.75rem', color: '#64748b' }}>{row.department}</div>
+					</div>
+				),
+			},
+			{
+				label: 'Contact Info',
+				key: 'phone',
+				render: (row) => (
+					<div style={{ fontSize: '0.85rem' }}>
+						<div style={{ color: '#0f172a' }}>{row.phone || '—'}</div>
+						{row.email && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{row.email}</div>}
+					</div>
+				),
+			},
+			{
+				label: 'Base Salary',
+				key: 'salaryAmount',
+				render: (row) => (
+					<span style={{ fontWeight: 700, color: '#0f172a' }}>
+						{formatCurrency(row.salaryAmount || 0)}
+					</span>
+				),
+			},
+			{
+				label: 'Status',
+				key: 'status',
+				render: (row) => (
+					<StatusBadge
+						status={row.status === 'active' ? 'success' : 'default'}
+						label={row.status}
+					/>
+				),
+			},
+		],
+		[],
+	)
+
+	const attendanceColumns = useMemo(
+		() => [
+			{
+				label: 'Date',
+				key: 'date',
+				render: (row) => <span style={{ fontWeight: 600, color: '#0f172a' }}>{row.date}</span>,
+			},
+			{
+				label: 'Employee',
+				key: 'employeeName',
+				render: (row) => <span style={{ fontWeight: 500, color: '#0f172a' }}>{row.employeeName}</span>,
+			},
+			{
+				label: 'Check In',
+				key: 'checkIn',
+				render: (row) => <span style={{ color: '#0f172a' }}>{row.checkIn}</span>,
+			},
+			{
+				label: 'Check Out',
+				key: 'checkOut',
+				render: (row) => <span style={{ color: '#64748b' }}>{row.checkOut || '—'}</span>,
+			},
+			{
+				label: 'Attendance Status',
+				key: 'status',
+				render: (row) => (
+					<StatusBadge
+						status={row.status === 'present' ? 'success' : 'warning'}
+						label={row.status}
+					/>
+				),
+			},
+		],
+		[],
+	)
+
+	const payrollColumns = useMemo(
+		() => [
+			{
+				label: 'Month',
+				key: 'monthYear',
+				render: (row) => <span style={{ fontWeight: 600, color: '#0f172a' }}>{row.monthYear}</span>,
+			},
+			{
+				label: 'Staff Member',
+				key: 'employeeName',
+				render: (row) => <span style={{ fontWeight: 500, color: '#0f172a' }}>{row.employeeName}</span>,
+			},
+			{
+				label: 'Base Salary',
+				key: 'baseSalary',
+				render: (row) => <span>{formatCurrency(row.baseSalary || 0)}</span>,
+			},
+			{
+				label: 'Bonus / Allowances',
+				key: 'bonus',
+				render: (row) => (
+					<span style={{ color: '#16a34a', fontWeight: 500 }}>
+						+{formatCurrency(row.bonus || 0)}
+					</span>
+				),
+			},
+			{
+				label: 'Deductions',
+				key: 'deductions',
+				render: (row) => (
+					<span style={{ color: '#dc2626', fontWeight: 500 }}>
+						-{formatCurrency(row.deductions || 0)}
+					</span>
+				),
+			},
+			{
+				label: 'Net Payable',
+				key: 'netSalary',
+				render: (row) => (
+					<strong style={{ color: '#0f172a' }}>
+						{formatCurrency(row.netSalary || 0)}
+					</strong>
+				),
+			},
+			{
+				label: 'Status',
+				key: 'status',
+				render: (row) => (
+					<StatusBadge
+						status={row.status === 'paid' ? 'success' : 'warning'}
+						label={row.status}
+					/>
+				),
+			},
+			{
+				label: 'Actions',
+				key: 'actions',
+				width: '130px',
+				render: (row) => (
+					<div>
+						{row.status === 'draft' && (
+							<Button
+								size="sm"
+								onClick={() => handlePaySlip(row.id)}
+							>
+								Disburse Salary
+							</Button>
+						)}
+					</div>
+				),
+			},
+		],
+		[handlePaySlip],
+	)
 
 	return (
-		<div className="pos-screen" style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-				<div>
-					<h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>HRM & Payroll Management</h1>
-					<p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-						Manage staff roster, department assignments, daily attendance logs, and monthly salary disbursement.
-					</p>
-				</div>
-				<div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-					<button
-						type="button"
-						className={`btn ${activeTab === 'employees' ? 'btn--primary' : 'btn--secondary'}`}
-						onClick={() => setActiveTab('employees')}
-					>
-						Staff Directory ({employees.length})
-					</button>
-					<button
-						type="button"
-						className={`btn ${activeTab === 'attendance' ? 'btn--primary' : 'btn--secondary'}`}
-						onClick={() => setActiveTab('attendance')}
-					>
-						Attendance Log
-					</button>
-					<button
-						type="button"
-						className={`btn ${activeTab === 'payroll' ? 'btn--primary' : 'btn--secondary'}`}
-						onClick={() => setActiveTab('payroll')}
-					>
-						Payroll Processing
-					</button>
-				</div>
-			</div>
+		<div className="stack">
+			<PageHeader
+				title="HRM & Payroll Management"
+				subtitle="Manage staff roster, department assignments, daily attendance logs, and monthly salary disbursement."
+				actions={
+					<div style={{ display: 'flex', gap: '8px' }}>
+						<Button
+							variant={activeTab === 'employees' ? 'primary' : 'secondary'}
+							onClick={() => setActiveTab('employees')}
+						>
+							Staff Directory ({employees.length})
+						</Button>
+						<Button
+							variant={activeTab === 'attendance' ? 'primary' : 'secondary'}
+							onClick={() => setActiveTab('attendance')}
+						>
+							Attendance
+						</Button>
+						<Button
+							variant={activeTab === 'payroll' ? 'primary' : 'secondary'}
+							onClick={() => setActiveTab('payroll')}
+						>
+							Payroll
+						</Button>
+					</div>
+				}
+			/>
 
 			{error && (
-				<div style={{ padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', marginBottom: '1rem' }}>
+				<div className="card" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }}>
 					{error}
 				</div>
 			)}
 			{successMsg && (
-				<div style={{ padding: '0.75rem 1rem', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', borderRadius: '6px', marginBottom: '1rem' }}>
+				<div className="card" style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a' }}>
 					{successMsg}
 				</div>
 			)}
 
-			{loading ? (
-				<p>Loading HRM records...</p>
-			) : activeTab === 'employees' ? (
-				<div>
-					<div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-						<button type="button" className="btn btn--primary" onClick={() => setShowEmpModal(true)}>
-							+ Add Staff Member
-						</button>
-					</div>
-					<div style={{ overflowX: 'auto', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-						<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-							<thead>
-								<tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-									<th style={{ padding: '0.75rem 1rem' }}>Employee Name</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Role & Department</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Contact Info</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Base Salary</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Status</th>
-								</tr>
-							</thead>
-							<tbody>
-								{employees.map((e) => (
-									<tr key={e.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-										<td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{e.name}</td>
-										<td style={{ padding: '0.75rem 1rem' }}>
-											<div>{e.role}</div>
-											<div style={{ color: '#64748b', fontSize: '0.75rem' }}>{e.department}</div>
-										</td>
-										<td style={{ padding: '0.75rem 1rem' }}>
-											<div>{e.phone}</div>
-											<div style={{ color: '#64748b', fontSize: '0.75rem' }}>{e.email}</div>
-										</td>
-										<td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
-											Rs. {Number(e.salaryAmount || 0).toLocaleString()}
-										</td>
-										<td style={{ padding: '0.75rem 1rem' }}>
-											<span style={{ padding: '0.2rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, background: '#d1fae5', color: '#047857' }}>
-												{e.status}
-											</span>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
+			{activeTab === 'employees' && (
+				<div className="card" style={{ padding: '1.25rem' }}>
+					<DataTable
+						columns={employeeColumns}
+						data={filteredEmployees}
+						loading={loading}
+						searchQuery={empSearch}
+						onSearchChange={setEmpSearch}
+						searchPlaceholder="Search staff by name, role, or department..."
+						actions={
+							<Button onClick={() => setShowEmpModal(true)}>
+								+ Add Staff Member
+							</Button>
+						}
+						emptyTitle="No staff members registered"
+						emptyDescription="No employee profiles found."
+						emptyActionText="+ Add Staff Member"
+						onEmptyAction={() => setShowEmpModal(true)}
+					/>
 				</div>
-			) : activeTab === 'attendance' ? (
-				<div>
-					<div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-						<button type="button" className="btn btn--primary" onClick={() => setShowClockModal(true)}>
-							+ Log Attendance
-						</button>
-					</div>
-					<div style={{ overflowX: 'auto', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-						<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-							<thead>
-								<tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-									<th style={{ padding: '0.75rem 1rem' }}>Date</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Employee</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Check In</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Check Out</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Status</th>
-								</tr>
-							</thead>
-							<tbody>
-								{attendance.length === 0 ? (
-									<tr>
-										<td colSpan="5" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-											No attendance logged yet.
-										</td>
-									</tr>
-								) : (
-									attendance.map((a) => (
-										<tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-											<td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{a.date}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>{a.employeeName}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>{a.checkIn}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>{a.checkOut || '-'}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>
-												<span style={{ padding: '0.2rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, background: '#d1fae5', color: '#047857' }}>
-													{a.status}
-												</span>
-											</td>
-										</tr>
-									))
-								)}
-							</tbody>
-						</table>
-					</div>
+			)}
+
+			{activeTab === 'attendance' && (
+				<div className="card" style={{ padding: '1.25rem' }}>
+					<DataTable
+						columns={attendanceColumns}
+						data={filteredAttendance}
+						loading={loading}
+						searchQuery={attSearch}
+						onSearchChange={setAttSearch}
+						searchPlaceholder="Search attendance by employee or date..."
+						actions={
+							<Button onClick={() => setShowClockModal(true)}>
+								+ Log Attendance
+							</Button>
+						}
+						emptyTitle="No attendance records"
+						emptyDescription="No attendance logged yet."
+						emptyActionText="+ Log Attendance"
+						onEmptyAction={() => setShowClockModal(true)}
+					/>
 				</div>
-			) : (
-				<div>
-					<div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-						<button type="button" className="btn btn--primary" onClick={() => setShowPayrollModal(true)}>
-							+ Run Monthly Payroll
-						</button>
-					</div>
-					<div style={{ overflowX: 'auto', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-						<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-							<thead>
-								<tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-									<th style={{ padding: '0.75rem 1rem' }}>Month</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Staff Name</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Base Salary</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Bonus / Allowances</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Deductions</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Net Disbursed</th>
-									<th style={{ padding: '0.75rem 1rem' }}>Status</th>
-									<th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
-								</tr>
-							</thead>
-							<tbody>
-								{payroll.length === 0 ? (
-									<tr>
-										<td colSpan="8" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-											No payroll runs recorded yet. Click &quot;+ Run Monthly Payroll&quot; to compute employee earnings.
-										</td>
-									</tr>
-								) : (
-									payroll.map((p) => (
-										<tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-											<td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{p.monthYear}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>{p.employeeName}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>Rs. {p.baseSalary?.toLocaleString()}</td>
-											<td style={{ padding: '0.75rem 1rem', color: '#16a34a' }}>+Rs. {p.bonus?.toLocaleString()}</td>
-											<td style={{ padding: '0.75rem 1rem', color: '#dc2626' }}>-Rs. {p.deductions?.toLocaleString()}</td>
-											<td style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>Rs. {p.netSalary?.toLocaleString()}</td>
-											<td style={{ padding: '0.75rem 1rem' }}>
-												<span
-													style={{
-														padding: '0.2rem 0.5rem',
-														borderRadius: '12px',
-														fontSize: '0.75rem',
-														fontWeight: 600,
-														background: p.status === 'paid' ? '#d1fae5' : '#fef3c7',
-														color: p.status === 'paid' ? '#047857' : '#b45309',
-													}}
-												>
-													{p.status}
-												</span>
-											</td>
-											<td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-												{p.status === 'draft' && (
-													<button
-														type="button"
-														className="btn btn--primary"
-														style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-														onClick={() => handlePaySlip(p.id)}
-													>
-														Disburse Salary
-													</button>
-												)}
-											</td>
-										</tr>
-									))
-								)}
-							</tbody>
-						</table>
-					</div>
+			)}
+
+			{activeTab === 'payroll' && (
+				<div className="card" style={{ padding: '1.25rem' }}>
+					<DataTable
+						columns={payrollColumns}
+						data={filteredPayroll}
+						loading={loading}
+						searchQuery={paySearch}
+						onSearchChange={setPaySearch}
+						searchPlaceholder="Search payroll runs by staff name or month..."
+						actions={
+							<Button onClick={() => setShowPayrollModal(true)}>
+								+ Run Monthly Payroll
+							</Button>
+						}
+						emptyTitle="No payroll records"
+						emptyDescription="No payroll runs recorded yet."
+						emptyActionText="+ Run Monthly Payroll"
+						onEmptyAction={() => setShowPayrollModal(true)}
+					/>
 				</div>
 			)}
 
 			{/* Add Employee Modal */}
-			{showEmpModal && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-					<div style={{ background: '#ffffff', borderRadius: '8px', padding: '1.5rem', width: '100%', maxWidth: '480px' }}>
-						<h2 style={{ margin: 0, fontSize: '1.25rem', marginBottom: '1rem' }}>Add Staff Member</h2>
-						<form onSubmit={handleAddEmployee}>
-							<div style={{ marginBottom: '0.75rem' }}>
-								<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Full Name *</label>
-								<input
-									type="text"
-									required
-									value={empForm.name}
-									onChange={(e) => setEmpForm({ ...empForm, name: e.target.value })}
-									style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-								/>
-							</div>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Role *</label>
-									<input
-										type="text"
-										required
-										placeholder="e.g. Cashier"
-										value={empForm.role}
-										onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Department</label>
-									<input
-										type="text"
-										value={empForm.department}
-										onChange={(e) => setEmpForm({ ...empForm, department: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-							<div style={{ marginBottom: '0.75rem' }}>
-								<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Base Salary (Rs.) *</label>
-								<input
-									type="number"
-									required
-									value={empForm.salaryAmount}
-									onChange={(e) => setEmpForm({ ...empForm, salaryAmount: e.target.value })}
-									style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-								/>
-							</div>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Phone</label>
-									<input
-										type="text"
-										value={empForm.phone}
-										onChange={(e) => setEmpForm({ ...empForm, phone: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Email</label>
-									<input
-										type="email"
-										value={empForm.email}
-										onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-							<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-								<button type="button" className="btn btn--secondary" onClick={() => setShowEmpModal(false)}>
-									Cancel
-								</button>
-								<button type="submit" className="btn btn--primary">
-									Save Employee
-								</button>
-							</div>
-						</form>
+			<Modal
+				title="Add New Staff Member"
+				open={showEmpModal}
+				onClose={() => setShowEmpModal(false)}
+			>
+				<form onSubmit={handleAddEmployee} className="stack">
+					<Input
+						label="Full Name"
+						placeholder="e.g. Kasun Perera"
+						required
+						value={empForm.name}
+						onChange={(e) => setEmpForm({ ...empForm, name: e.target.value })}
+					/>
+					<div className="grid grid--2">
+						<Input
+							label="Operational Role"
+							placeholder="e.g. Lead Cashier"
+							required
+							value={empForm.role}
+							onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}
+						/>
+						<div>
+							<label className="label">Department</label>
+							<select
+								className="input"
+								value={empForm.department}
+								onChange={(e) => setEmpForm({ ...empForm, department: e.target.value })}
+							>
+								<option value="Operations">Operations</option>
+								<option value="Sales & Service">Sales & Service</option>
+								<option value="Kitchen / Culinary">Kitchen / Culinary</option>
+								<option value="Logistics">Logistics</option>
+								<option value="Finance & Admin">Finance & Admin</option>
+							</select>
+						</div>
 					</div>
-				</div>
-			)}
+					<Input
+						label="Base Monthly Salary (Rs.)"
+						type="number"
+						required
+						value={empForm.salaryAmount}
+						onChange={(e) => setEmpForm({ ...empForm, salaryAmount: e.target.value })}
+					/>
+					<div className="grid grid--2">
+						<Input
+							label="Contact Phone"
+							placeholder="07xxxxxxxx"
+							value={empForm.phone}
+							onChange={(e) => setEmpForm({ ...empForm, phone: e.target.value })}
+						/>
+						<Input
+							label="Email Address"
+							type="email"
+							placeholder="staff@store.com"
+							value={empForm.email}
+							onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })}
+						/>
+					</div>
+					<div className="row row--space" style={{ marginTop: '1rem' }}>
+						<Button type="button" variant="secondary" onClick={() => setShowEmpModal(false)}>
+							Cancel
+						</Button>
+						<Button type="submit">Save Staff Member</Button>
+					</div>
+				</form>
+			</Modal>
 
-			{/* Clock-in Modal */}
-			{showClockModal && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-					<div style={{ background: '#ffffff', borderRadius: '8px', padding: '1.5rem', width: '100%', maxWidth: '420px' }}>
-						<h2 style={{ margin: 0, fontSize: '1.25rem', marginBottom: '1rem' }}>Log Daily Attendance</h2>
-						<form onSubmit={handleRecordAttendance}>
-							<div style={{ marginBottom: '0.75rem' }}>
-								<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Select Employee *</label>
-								<select
-									value={clockForm.employeeId}
-									onChange={(e) => setClockForm({ ...clockForm, employeeId: e.target.value })}
-									style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-								>
-									{employees.map((e) => (
-										<option key={e.id} value={e.id}>
-											{e.name} ({e.role})
-										</option>
-									))}
-								</select>
-							</div>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Date</label>
-									<input
-										type="date"
-										value={clockForm.date}
-										onChange={(e) => setClockForm({ ...clockForm, date: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Check In Time</label>
-									<input
-										type="time"
-										value={clockForm.checkIn}
-										onChange={(e) => setClockForm({ ...clockForm, checkIn: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-							<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-								<button type="button" className="btn btn--secondary" onClick={() => setShowClockModal(false)}>
-									Cancel
-								</button>
-								<button type="submit" className="btn btn--primary">
-									Record Attendance
-								</button>
-							</div>
-						</form>
+			{/* Attendance Clock In Modal */}
+			<Modal
+				title="Log Daily Attendance"
+				open={showClockModal}
+				onClose={() => setShowClockModal(false)}
+			>
+				<form onSubmit={handleRecordAttendance} className="stack">
+					<div>
+						<label className="label">Select Staff Member</label>
+						<select
+							className="input"
+							value={clockForm.employeeId}
+							onChange={(e) => setClockForm({ ...clockForm, employeeId: e.target.value })}
+						>
+							{employees.map((e) => (
+								<option key={e.id} value={e.id}>
+									{e.name} ({e.role})
+								</option>
+							))}
+						</select>
 					</div>
-				</div>
-			)}
+					<div className="grid grid--2">
+						<Input
+							label="Attendance Date"
+							type="date"
+							value={clockForm.date}
+							onChange={(e) => setClockForm({ ...clockForm, date: e.target.value })}
+						/>
+						<Input
+							label="Check In Time"
+							type="time"
+							value={clockForm.checkIn}
+							onChange={(e) => setClockForm({ ...clockForm, checkIn: e.target.value })}
+						/>
+					</div>
+					<div className="row row--space" style={{ marginTop: '1rem' }}>
+						<Button type="button" variant="secondary" onClick={() => setShowClockModal(false)}>
+							Cancel
+						</Button>
+						<Button type="submit">Save Attendance</Button>
+					</div>
+				</form>
+			</Modal>
 
-			{/* Payroll Modal */}
-			{showPayrollModal && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-					<div style={{ background: '#ffffff', borderRadius: '8px', padding: '1.5rem', width: '100%', maxWidth: '420px' }}>
-						<h2 style={{ margin: 0, fontSize: '1.25rem', marginBottom: '1rem' }}>Generate Monthly Payroll</h2>
-						<form onSubmit={handleGeneratePayroll}>
-							<div style={{ marginBottom: '0.75rem' }}>
-								<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Payroll Period (YYYY-MM)</label>
-								<input
-									type="month"
-									required
-									value={payrollForm.monthYear}
-									onChange={(e) => setPayrollForm({ ...payrollForm, monthYear: e.target.value })}
-									style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-								/>
-							</div>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Standard Bonus (Rs.)</label>
-									<input
-										type="number"
-										value={payrollForm.bonus}
-										onChange={(e) => setPayrollForm({ ...payrollForm, bonus: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-								<div>
-									<label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600 }}>Deductions (Rs.)</label>
-									<input
-										type="number"
-										value={payrollForm.deductions}
-										onChange={(e) => setPayrollForm({ ...payrollForm, deductions: e.target.value })}
-										style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-									/>
-								</div>
-							</div>
-							<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-								<button type="button" className="btn btn--secondary" onClick={() => setShowPayrollModal(false)}>
-									Cancel
-								</button>
-								<button type="submit" className="btn btn--primary">
-									Process Payroll Run
-								</button>
-							</div>
-						</form>
+			{/* Run Payroll Modal */}
+			<Modal
+				title="Generate Monthly Payroll"
+				open={showPayrollModal}
+				onClose={() => setShowPayrollModal(false)}
+			>
+				<form onSubmit={handleGeneratePayroll} className="stack">
+					<Input
+						label="Payroll Period (YYYY-MM)"
+						type="month"
+						required
+						value={payrollForm.monthYear}
+						onChange={(e) => setPayrollForm({ ...payrollForm, monthYear: e.target.value })}
+					/>
+					<div className="grid grid--2">
+						<Input
+							label="Standard Bonus (Rs.)"
+							type="number"
+							value={payrollForm.bonus}
+							onChange={(e) => setPayrollForm({ ...payrollForm, bonus: e.target.value })}
+						/>
+						<Input
+							label="Deductions (Rs.)"
+							type="number"
+							value={payrollForm.deductions}
+							onChange={(e) => setPayrollForm({ ...payrollForm, deductions: e.target.value })}
+						/>
 					</div>
-				</div>
-			)}
+					<div className="row row--space" style={{ marginTop: '1rem' }}>
+						<Button type="button" variant="secondary" onClick={() => setShowPayrollModal(false)}>
+							Cancel
+						</Button>
+						<Button type="submit">Process Payroll</Button>
+					</div>
+				</form>
+			</Modal>
 		</div>
 	)
 }
-
