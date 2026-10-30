@@ -35,6 +35,17 @@ export default function CheckoutPanel() {
 		}
 	}, [])
 
+	useEffect(() => {
+		const handleKeyDown = (e) => {
+			if (e.key === 'F9' && items.length > 0) {
+				e.preventDefault()
+				setPayOpen(true)
+			}
+		}
+		window.addEventListener('keydown', handleKeyDown)
+		return () => window.removeEventListener('keydown', handleKeyDown)
+	}, [items.length])
+
 	const totals = useMemo(() => {
 		const base = calculateTotals(items)
 		let discountAmount = 0
