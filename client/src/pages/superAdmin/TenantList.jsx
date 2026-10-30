@@ -1,21 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Button from '../../components/common/Button.jsx'
-import Input from '../../components/common/Input.jsx'
 import Modal from '../../components/common/Modal.jsx'
-import Table from '../../components/common/Table.jsx'
+import DataTable from '../../components/common/DataTable.jsx'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import StatusBadge from '../../components/common/StatusBadge.jsx'
 import superAdminService from '../../services/superAdminService'
 import { formatDate } from '../../utils/formatDate'
-
-const STATUS_COLORS = {
-	active: { bg: '#dcfce7', text: '#166534' },
-	trial: { bg: '#fef3c7', text: '#92400e' },
-	past_due: { bg: '#ffedd5', text: '#9a3412' },
-	suspended: { bg: '#fee2e2', text: '#991b1b' },
-	cancelled: { bg: '#f1f5f9', text: '#475569' },
-	expired: { bg: '#fee2e2', text: '#991b1b' },
-	archived: { bg: '#e2e8f0', text: '#334155' },
-}
 
 export default function TenantList() {
 	const [tenants, setTenants] = useState([])
@@ -25,6 +16,7 @@ export default function TenantList() {
 	const [statusFilter, setStatusFilter] = useState('all')
 	const [submitting, setSubmitting] = useState(false)
 	const [error, setError] = useState(null)
+	const [currentStep, setCurrentStep] = useState(1)
 
 	const [form, setForm] = useState({
 		name: '',
@@ -40,6 +32,7 @@ export default function TenantList() {
 		adminEmail: '',
 		adminPassword: '',
 		maxUsers: 5,
+		maxBranches: 2,
 		maxProducts: 500,
 	})
 
@@ -49,7 +42,7 @@ export default function TenantList() {
 			.getTenants()
 			.then((data) => {
 				if (active) {
-					setTenants(data)
+					setTenants(data || [])
 					setLoading(false)
 				}
 			})
@@ -66,10 +59,13 @@ export default function TenantList() {
 
 	async function reloadTenants() {
 		try {
+			setLoading(true)
 			const data = await superAdminService.getTenants()
-			setTenants(data)
+			setTenants(data || [])
 		} catch (err) {
 			setError(err?.response?.data?.message || err?.message || 'Failed to refresh')
+		} finally {
+			setLoading(false)
 		}
 	}
 
@@ -88,6 +84,7 @@ export default function TenantList() {
 				industryPreset: form.businessType,
 			})
 			setModalOpen(false)
+			setCurrentStep(1)
 			setForm({
 				name: '',
 				businessType: 'retail',
@@ -102,11 +99,12 @@ export default function TenantList() {
 				adminEmail: '',
 				adminPassword: '',
 				maxUsers: 5,
+				maxBranches: 2,
 				maxProducts: 500,
 			})
 			await reloadTenants()
 		} catch (err) {
-			setError(err?.response?.data?.message || err?.message || 'Tenant onboarding failed')
+			setError(err?.response?.data?.message || err?.message || 'Failed to create business')
 		} finally {
 			setSubmitting(false)
 		}
@@ -114,260 +112,447 @@ export default function TenantList() {
 
 	const filteredTenants = useMemo(() => {
 		return tenants.filter((t) => {
-			const matchesQuery =
+			const matchesStatus = statusFilter === 'all' || t.status === statusFilter
+			const matchesSearch =
 				!searchQuery ||
 				t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
 				t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				t.slug.toLowerCase().includes(searchQuery.toLowerCase())
-			const matchesStatus = statusFilter === 'all' || t.status === statusFilter
-			return matchesQuery && matchesStatus
+				(t.slug && t.slug.toLowerCase().includes(searchQuery.toLowerCase()))
+			return matchesStatus && matchesSearch
 		})
-	}, [tenants, searchQuery, statusFilter])
+	}, [tenants, statusFilter, searchQuery])
 
-	const columns = useMemo(
-		() => [
-			{
-				header: 'Business Name',
-				key: 'name',
-				render: (row) => (
-					<div>
-						<div className="bold">{row.name}</div>
-						<div className="muted" style={{ fontSize: '0.8rem' }}>{row.email} | {row.slug}</div>
-					</div>
-				),
-			},
-			{
-				header: 'Type',
-				key: 'businessType',
-				render: (row) => (
-					<span className="badge" style={{ textTransform: 'capitalize' }}>
-						{row.businessType || 'Retail'}
-					</span>
-				),
-			},
-			{
-				header: 'Plan',
-				key: 'plan',
-				render: (row) => (
-					<span style={{ fontWeight: 'bold', textTransform: 'uppercase', color: '#0f766e' }}>
-						{row.plan}
-					</span>
-				),
-			},
-			{
-				header: 'Status',
-				key: 'status',
-				render: (row) => {
-					const colors = STATUS_COLORS[row.status] || { bg: '#f1f5f9', text: '#334155' }
-					return (
-						<span
-							style={{
-								padding: '3px 8px',
-								borderRadius: '4px',
-								fontSize: '0.8rem',
-								fontWeight: 'bold',
-								backgroundColor: colors.bg,
-								color: colors.text,
-							}}
-						>
-							{String(row.status || 'trial').toUpperCase()}
-						</span>
-					)
-				},
-			},
-			{
-				header: 'Users',
-				key: 'userCount',
-				render: (row) => row.userCount || 0,
-			},
-			{
-				header: 'Created',
-				key: 'createdAt',
-				render: (row) => formatDate(row.createdAt),
-			},
-			{
-				header: 'Actions',
-				key: 'actions',
-				render: (row) => (
-					<Link to={`/super-admin/tenants/${row.id}`}>
-						<Button variant="secondary">Manage / Config</Button>
+	const columns = [
+		{
+			key: 'name',
+			label: 'Business Name',
+			render: (t) => (
+				<div>
+					<Link
+						to={`/super-admin/tenants/${t.id}`}
+						style={{ fontWeight: 600, color: 'var(--text)' }}
+					>
+						{t.name}
 					</Link>
-				),
-			},
-		],
-		[],
-	)
+					<div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+						{t.email} {t.slug ? `· /${t.slug}` : ''}
+					</div>
+				</div>
+			),
+		},
+		{
+			key: 'industry',
+			label: 'Industry / Preset',
+			render: (t) => (
+				<span style={{ textTransform: 'capitalize', fontSize: '0.85rem' }}>
+					{t.business_type || 'Retail'}
+				</span>
+			),
+		},
+		{
+			key: 'plan',
+			label: 'Plan',
+			render: (t) => (
+				<span
+					style={{
+						padding: '2px 8px',
+						borderRadius: '4px',
+						fontSize: '0.75rem',
+						fontWeight: 700,
+						textTransform: 'uppercase',
+						background: t.plan === 'enterprise' ? '#ede9fe' : '#e0f2fe',
+						color: t.plan === 'enterprise' ? '#6d28d9' : '#0369a1',
+					}}
+				>
+					{t.plan || 'Starter'}
+				</span>
+			),
+		},
+		{
+			key: 'status',
+			label: 'Status',
+			render: (t) => <StatusBadge status={t.status || 'trial'} />,
+		},
+		{
+			key: 'quotas',
+			label: 'Limits (Users/Branches/Products)',
+			render: (t) => (
+				<span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+					{t.max_users || 2} users · {t.max_branches || 1} br · {t.max_products || 100} prods
+				</span>
+			),
+		},
+		{
+			key: 'created_at',
+			label: 'Created',
+			render: (t) => (
+				<span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+					{formatDate(t.created_at)}
+				</span>
+			),
+		},
+		{
+			key: 'actions',
+			label: 'Actions',
+			render: (t) => (
+				<Link to={`/super-admin/tenants/${t.id}`} className="btn btn--secondary btn--sm">
+					Manage →
+				</Link>
+			),
+		},
+	]
 
 	return (
-		<div className="stack">
-			<div className="row row--space">
-				<div>
-					<h2 className="h2" style={{ margin: 0 }}>Business Tenant Workspaces</h2>
-					<div className="muted">Manage all multi-tenant businesses, plans, modules, and limits.</div>
-				</div>
-				<Button onClick={() => setModalOpen(true)}>+ Onboard New Business</Button>
-			</div>
-
-			{error ? <div className="card error">{error}</div> : null}
-
-			<div className="card row row--space" style={{ gap: '1rem', flexWrap: 'wrap' }}>
-				<Input
-					placeholder="Search by business name, slug, email..."
-					value={searchQuery}
-					onChange={(e) => setSearchQuery(e.target.value)}
-					style={{ flex: 2, minWidth: '260px' }}
-				/>
-				<div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
-					<span className="muted">Status:</span>
-					<select
-						className="input"
-						value={statusFilter}
-						onChange={(e) => setStatusFilter(e.target.value)}
+		<div>
+			<PageHeader
+				title="Tenants & Business Directory"
+				subtitle="Manage registered business workspaces, subscription tiers, and module entitlements."
+				actions={
+					<Button
+						variant="primary"
+						onClick={() => {
+							setCurrentStep(1)
+							setError(null)
+							setModalOpen(true)
+						}}
 					>
-						<option value="all">All Statuses</option>
-						<option value="active">Active</option>
-						<option value="trial">Trial</option>
-						<option value="past_due">Past Due</option>
-						<option value="suspended">Suspended</option>
-						<option value="cancelled">Cancelled</option>
-						<option value="expired">Expired</option>
-					</select>
-				</div>
-			</div>
+						+ Onboard Commercial Tenant
+					</Button>
+				}
+			/>
 
-			{loading ? (
-				<div className="card muted">Loading tenant directory...</div>
-			) : (
-				<Table columns={columns} data={filteredTenants} />
+			{error && (
+				<div
+					style={{
+						padding: '12px 16px',
+						background: 'var(--danger-light)',
+						border: '1px solid #fecaca',
+						color: 'var(--danger)',
+						borderRadius: '8px',
+						marginBottom: '16px',
+						fontSize: '0.875rem',
+					}}
+				>
+					{error}
+				</div>
 			)}
 
-			{/* Onboard Business Modal */}
+			{/* Status Filter Bar */}
+			<div className="card" style={{ padding: '12px 16px', marginBottom: '16px' }}>
+				<div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+					<span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)' }}>Filter:</span>
+					{['all', 'active', 'trial', 'past_due', 'suspended', 'cancelled'].map((st) => (
+						<button
+							key={st}
+							type="button"
+							className={`btn btn--sm ${statusFilter === st ? 'btn--primary' : 'btn--secondary'}`}
+							onClick={() => setStatusFilter(st)}
+							style={{ textTransform: 'capitalize', borderRadius: '9999px' }}
+						>
+							{st.replace('_', ' ')}
+						</button>
+					))}
+				</div>
+			</div>
+
+			<DataTable
+				columns={columns}
+				data={filteredTenants}
+				loading={loading}
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
+				searchPlaceholder="Search tenants by name, email, slug..."
+				emptyTitle="No tenant businesses found"
+				emptyDescription="There are no tenants matching your current search or status filter."
+			/>
+
+			{/* Multi-Step Onboarding Modal */}
 			<Modal
-				title="Onboard New Business Workspace"
 				open={modalOpen}
 				onClose={() => setModalOpen(false)}
+				title={`Onboard Business (Step ${currentStep} of 4)`}
+				maxWidth="640px"
 			>
-				<form className="stack" onSubmit={handleCreateTenant}>
-					<div className="grid grid--2">
-						<Input
-							label="Business Name"
-							placeholder="e.g. ABC Supermarket"
-							value={form.name}
-							onChange={(e) => setForm({ ...form, name: e.target.value })}
-							required
-						/>
-						<div>
-							<label className="label">Industry Preset</label>
-							<select
-								className="input"
-								value={form.businessType}
-								onChange={(e) => setForm({ ...form, businessType: e.target.value })}
-							>
-								<option value="retail">Retail Shop / Boutique</option>
-								<option value="supermarket">Supermarket / Grocery</option>
-								<option value="restaurant">Restaurant / Café</option>
-								<option value="pharmacy">Pharmacy / Healthcare</option>
-								<option value="service_center">Service Center / Repairs</option>
-								<option value="salon">Salon / Appointments</option>
-								<option value="wholesale">Wholesale / Distribution</option>
-							</select>
+				{/* Step Progress Indicator */}
+				<div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+					{['Company Profile', 'Store Admin', 'Plan & Preset', 'Review & Quotas'].map((label, idx) => (
+						<div
+							key={idx}
+							style={{
+								flex: 1,
+								paddingBottom: '6px',
+								borderBottom: `3px solid ${currentStep === idx + 1 ? 'var(--primary)' : currentStep > idx + 1 ? 'var(--success)' : 'var(--border)'}`,
+								fontSize: '0.75rem',
+								fontWeight: currentStep === idx + 1 ? 700 : 500,
+								color: currentStep === idx + 1 ? 'var(--primary)' : 'var(--muted)',
+								textAlign: 'center',
+							}}
+						>
+							{idx + 1}. {label}
 						</div>
-					</div>
+					))}
+				</div>
 
-					<div className="grid grid--2">
-						<Input
-							label="Business Email"
-							type="email"
-							placeholder="billing@abcretail.com"
-							value={form.email}
-							onChange={(e) => setForm({ ...form, email: e.target.value })}
-							required
-						/>
-						<Input
-							label="Phone Number"
-							placeholder="+94 11 234 5678"
-							value={form.phone}
-							onChange={(e) => setForm({ ...form, phone: e.target.value })}
-						/>
-					</div>
+				<form onSubmit={handleCreateTenant}>
+					{/* STEP 1: Company Profile */}
+					{currentStep === 1 && (
+						<div className="stack" style={{ gap: '14px' }}>
+							<div className="field">
+								<label className="field__label">Legal Business Name *</label>
+								<input
+									type="text"
+									className="input"
+									required
+									placeholder="e.g. Royal Palm Seafood Restaurant"
+									value={form.name}
+									onChange={(e) => setForm({ ...form, name: e.target.value })}
+								/>
+							</div>
 
-					<div className="grid grid--3">
-						<div>
-							<label className="label">Subscription Plan</label>
-							<select
-								className="input"
-								value={form.plan}
-								onChange={(e) => setForm({ ...form, plan: e.target.value })}
-							>
-								<option value="starter">Starter Plan ($9.99/mo)</option>
-								<option value="pro">Pro Plan ($29.99/mo)</option>
-								<option value="enterprise">Enterprise Plan ($99.99/mo)</option>
-							</select>
-						</div>
-						<div>
-							<label className="label">Account Status</label>
-							<select
-								className="input"
-								value={form.status}
-								onChange={(e) => setForm({ ...form, status: e.target.value })}
-							>
-								<option value="trial">Free Trial</option>
-								<option value="active">Active (Paid)</option>
-							</select>
-						</div>
-						<div>
-							<label className="label">Currency</label>
-							<select
-								className="input"
-								value={form.currency}
-								onChange={(e) => setForm({ ...form, currency: e.target.value })}
-							>
-								<option value="LKR">LKR (Sri Lankan Rupee)</option>
-								<option value="USD">USD (US Dollar)</option>
-								<option value="EUR">EUR (Euro)</option>
-								<option value="GBP">GBP (British Pound)</option>
-								<option value="INR">INR (Indian Rupee)</option>
-							</select>
-						</div>
-					</div>
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+								<div className="field">
+									<label className="field__label">Industry Profile *</label>
+									<select
+										className="select"
+										value={form.businessType}
+										onChange={(e) => setForm({ ...form, businessType: e.target.value })}
+									>
+										<option value="retail">Retail Shop / Boutique</option>
+										<option value="supermarket">Supermarket / Grocery</option>
+										<option value="restaurant">Restaurant & Café</option>
+										<option value="repairs">Service Center & Repairs</option>
+										<option value="salon">Salon & Spa Aesthetics</option>
+										<option value="pharmacy">Pharmacy & Healthcare</option>
+									</select>
+								</div>
+								<div className="field">
+									<label className="field__label">Business Reg. Number</label>
+									<input
+										type="text"
+										className="input"
+										placeholder="e.g. PV-12345"
+										value={form.registrationNumber}
+										onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
+									/>
+								</div>
+							</div>
 
-					<div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
-						<h4 className="h4" style={{ margin: '0 0 0.5rem 0' }}>Initial Business Owner Credentials</h4>
-						<div className="grid grid--3">
-							<Input
-								label="Owner Name"
-								placeholder="e.g. John Silva"
-								value={form.adminName}
-								onChange={(e) => setForm({ ...form, adminName: e.target.value })}
-								required
-							/>
-							<Input
-								label="Owner Login Email"
-								type="email"
-								placeholder="owner@abcretail.com"
-								value={form.adminEmail}
-								onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
-								required
-							/>
-							<Input
-								label="Password (min 8 chars)"
-								type="password"
-								placeholder="••••••••"
-								value={form.adminPassword}
-								onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
-								required
-							/>
-						</div>
-					</div>
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+								<div className="field">
+									<label className="field__label">Business Contact Email *</label>
+									<input
+										type="email"
+										className="input"
+										required
+										placeholder="contact@royalpalm.com"
+										value={form.email}
+										onChange={(e) => setForm({ ...form, email: e.target.value })}
+									/>
+								</div>
+								<div className="field">
+									<label className="field__label">Phone Number</label>
+									<input
+										type="text"
+										className="input"
+										placeholder="+94 11 234 5678"
+										value={form.phone}
+										onChange={(e) => setForm({ ...form, phone: e.target.value })}
+									/>
+								</div>
+							</div>
 
-					<div className="row row--space" style={{ marginTop: '1rem' }}>
-						<Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-							Cancel
-						</Button>
-						<Button type="submit" disabled={submitting}>
-							{submitting ? 'Creating Business...' : 'Create Business Workspace'}
-						</Button>
-					</div>
+							<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+								<Button
+									variant="primary"
+									disabled={!form.name || !form.email}
+									onClick={() => setCurrentStep(2)}
+								>
+									Next: Owner Profile →
+								</Button>
+							</div>
+						</div>
+					)}
+
+					{/* STEP 2: Owner Information */}
+					{currentStep === 2 && (
+						<div className="stack" style={{ gap: '14px' }}>
+							<div className="field">
+								<label className="field__label">Store Administrator Name *</label>
+								<input
+									type="text"
+									className="input"
+									required
+									placeholder="e.g. Kasun Silva"
+									value={form.adminName}
+									onChange={(e) => setForm({ ...form, adminName: e.target.value })}
+								/>
+							</div>
+
+							<div className="field">
+								<label className="field__label">Admin Login Email *</label>
+								<input
+									type="email"
+									className="input"
+									required
+									placeholder="admin@royalpalm.com"
+									value={form.adminEmail}
+									onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+								/>
+							</div>
+
+							<div className="field">
+								<label className="field__label">Initial Secure Password (Min 8 chars) *</label>
+								<input
+									type="password"
+									className="input"
+									required
+									placeholder="Choose an initial strong password"
+									value={form.adminPassword}
+									onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
+								/>
+							</div>
+
+							<div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+								<Button variant="secondary" onClick={() => setCurrentStep(1)}>
+									← Back
+								</Button>
+								<Button
+									variant="primary"
+									disabled={!form.adminName || !form.adminPassword || form.adminPassword.length < 8}
+									onClick={() => setCurrentStep(3)}
+								>
+									Next: Plan & Preset →
+								</Button>
+							</div>
+						</div>
+					)}
+
+					{/* STEP 3: Subscription Plan */}
+					{currentStep === 3 && (
+						<div className="stack" style={{ gap: '14px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+								{[
+									{ id: 'starter', name: 'Starter', price: '$19/mo', desc: 'Single shop, basic POS' },
+									{ id: 'pro', name: 'Professional', price: '$49/mo', desc: 'Purchases, multi-cashier' },
+									{ id: 'enterprise', name: 'Enterprise', price: '$129/mo', desc: 'All ERP & Industry modules' },
+								].map((tier) => (
+									<div
+										key={tier.id}
+										onClick={() => setForm({ ...form, plan: tier.id })}
+										style={{
+											border: `2px solid ${form.plan === tier.id ? 'var(--primary)' : 'var(--border)'}`,
+											borderRadius: '8px',
+											padding: '12px',
+											cursor: 'pointer',
+											background: form.plan === tier.id ? 'var(--primary-light)' : '#ffffff',
+										}}
+									>
+										<div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{tier.name}</div>
+										<div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary)', margin: '4px 0' }}>
+											{tier.price}
+										</div>
+										<div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{tier.desc}</div>
+									</div>
+								))}
+							</div>
+
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+								<div className="field">
+									<label className="field__label">Initial Account Status</label>
+									<select
+										className="select"
+										value={form.status}
+										onChange={(e) => setForm({ ...form, status: e.target.value })}
+									>
+										<option value="trial">Trial Window</option>
+										<option value="active">Active (Paid)</option>
+									</select>
+								</div>
+								<div className="field">
+									<label className="field__label">Trial Period Duration (Days)</label>
+									<input
+										type="number"
+										className="input"
+										min="1"
+										value={form.trialDays}
+										onChange={(e) => setForm({ ...form, trialDays: Number(e.target.value) })}
+									/>
+								</div>
+							</div>
+
+							<div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+								<Button variant="secondary" onClick={() => setCurrentStep(2)}>
+									← Back
+								</Button>
+								<Button variant="primary" onClick={() => setCurrentStep(4)}>
+									Next: Quotas & Review →
+								</Button>
+							</div>
+						</div>
+					)}
+
+					{/* STEP 4: Resource Limits & Review */}
+					{currentStep === 4 && (
+						<div className="stack" style={{ gap: '14px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+								<div className="field">
+									<label className="field__label">Max Users</label>
+									<input
+										type="number"
+										className="input"
+										min="1"
+										value={form.maxUsers}
+										onChange={(e) => setForm({ ...form, maxUsers: Number(e.target.value) })}
+									/>
+								</div>
+								<div className="field">
+									<label className="field__label">Max Branches</label>
+									<input
+										type="number"
+										className="input"
+										min="1"
+										value={form.maxBranches}
+										onChange={(e) => setForm({ ...form, maxBranches: Number(e.target.value) })}
+									/>
+								</div>
+								<div className="field">
+									<label className="field__label">Max Products</label>
+									<input
+										type="number"
+										className="input"
+										min="10"
+										value={form.maxProducts}
+										onChange={(e) => setForm({ ...form, maxProducts: Number(e.target.value) })}
+									/>
+								</div>
+							</div>
+
+							<div
+								style={{
+									padding: '14px',
+									borderRadius: '8px',
+									background: '#f8fafc',
+									border: '1px solid #e2e8f0',
+									fontSize: '0.85rem',
+								}}
+							>
+								<div style={{ fontWeight: 700, marginBottom: '6px' }}>Onboarding Summary:</div>
+								<div>Company: <strong>{form.name}</strong></div>
+								<div>Industry: <strong style={{ textTransform: 'capitalize' }}>{form.businessType}</strong></div>
+								<div>Plan: <strong style={{ textTransform: 'uppercase' }}>{form.plan}</strong> ({form.status})</div>
+								<div>Owner: <strong>{form.adminName}</strong> ({form.adminEmail || form.email})</div>
+							</div>
+
+							<div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
+								<Button variant="secondary" onClick={() => setCurrentStep(3)} disabled={submitting}>
+									← Back
+								</Button>
+								<Button type="submit" variant="primary" loading={submitting}>
+									Confirm & Provision Tenant
+								</Button>
+							</div>
+						</div>
+					)}
 				</form>
 			</Modal>
 		</div>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import superAdminService from '../../services/superAdminService'
-import Button from '../../components/common/Button.jsx'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import StatCard from '../../components/common/StatCard.jsx'
+import LoadingSkeleton from '../../components/common/LoadingSkeleton.jsx'
 
 export default function SuperAdminDashboard() {
 	const [stats, setStats] = useState({
@@ -24,7 +26,7 @@ export default function SuperAdminDashboard() {
 			.getStats()
 			.then((data) => {
 				if (active) {
-					setStats(data)
+					setStats(data || {})
 					setLoading(false)
 				}
 			})
@@ -37,93 +39,131 @@ export default function SuperAdminDashboard() {
 	}, [])
 
 	return (
-		<div className="stack">
-			<div className="row row--space">
-				<div>
-					<h2 className="h2" style={{ margin: 0 }}>Platform Control Center</h2>
-					<div className="muted">Universal multi-tenant SaaS oversight, subscription metrics, and growth.</div>
-				</div>
-				<Link to="/super-admin/tenants">
-					<Button>+ Onboard New Business</Button>
-				</Link>
-			</div>
+		<div>
+			<PageHeader
+				title="SaaS Platform Control Center"
+				subtitle="Global multi-tenant metrics, Monthly Recurring Revenue (MRR), and workspace growth."
+				actions={
+					<Link to="/super-admin/tenants" className="btn btn--primary">
+						+ Onboard Commercial Tenant
+					</Link>
+				}
+			/>
 
 			{loading ? (
-				<div className="card muted">Loading platform analytics...</div>
+				<LoadingSkeleton type="card" count={6} />
 			) : (
 				<>
-					{/* Financial Performance */}
-					<h3 className="h3" style={{ marginTop: '0.5rem', marginBottom: '0.25rem' }}>Recurring Revenue (SaaS Metrics)</h3>
-					<div className="grid grid--3">
-						<div className="card" style={{ borderLeft: '4px solid #0f766e' }}>
-							<div className="muted">Monthly Recurring Revenue (MRR)</div>
-							<div className="bold" style={{ fontSize: '1.8rem', color: '#0f766e', marginTop: '0.25rem' }}>
-								${Number(stats.monthlyRevenue || 0).toFixed(2)}
-							</div>
-							<div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-								Calculated from active subscriptions
-							</div>
+					{/* MRR & ARR Financial Metrics */}
+					<div style={{ marginBottom: '24px' }}>
+						<div
+							style={{
+								fontSize: '0.8125rem',
+								fontWeight: 700,
+								color: 'var(--muted)',
+								textTransform: 'uppercase',
+								letterSpacing: '0.5px',
+								marginBottom: '12px',
+							}}
+						>
+							Subscription Run-Rate (SaaS Financials)
 						</div>
-						<div className="card" style={{ borderLeft: '4px solid #0284c7' }}>
-							<div className="muted">Annual Recurring Revenue (ARR)</div>
-							<div className="bold" style={{ fontSize: '1.8rem', color: '#0284c7', marginTop: '0.25rem' }}>
-								${Number(stats.annualRevenue || 0).toFixed(2)}
-							</div>
-							<div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-								Projected 12-month run rate
-							</div>
-						</div>
-						<div className="card" style={{ borderLeft: '4px solid #8b5cf6' }}>
-							<div className="muted">Paying Subscribers</div>
-							<div className="bold" style={{ fontSize: '1.8rem', color: '#8b5cf6', marginTop: '0.25rem' }}>
-								{stats.active} / {stats.totalTenants}
-							</div>
-							<div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-								{stats.totalTenants > 0 ? Math.round((stats.active / stats.totalTenants) * 100) : 0}% paying conversion
-							</div>
-						</div>
-					</div>
-
-					{/* Business Tenant Distribution */}
-					<h3 className="h3" style={{ marginTop: '0.75rem', marginBottom: '0.25rem' }}>Tenant Status Breakdown</h3>
-					<div className="grid grid--4">
-						<div className="card">
-							<div className="muted">Total Registered</div>
-							<div className="bold" style={{ fontSize: '1.4rem' }}>{stats.totalTenants}</div>
-						</div>
-						<div className="card">
-							<div className="muted">Active Workspaces</div>
-							<div className="bold" style={{ fontSize: '1.4rem', color: '#166534' }}>{stats.active}</div>
-						</div>
-						<div className="card">
-							<div className="muted">Trial Accounts</div>
-							<div className="bold" style={{ fontSize: '1.4rem', color: '#d97706' }}>{stats.trial}</div>
-						</div>
-						<div className="card">
-							<div className="muted">Suspended / Expired</div>
-							<div className="bold" style={{ fontSize: '1.4rem', color: '#dc2626' }}>
-								{Number(stats.suspended || 0) + Number(stats.expired || 0)}
-							</div>
+						<div className="grid grid--3">
+							<StatCard
+								title="Monthly Recurring Revenue (MRR)"
+								value={`$${Number(stats.monthlyRevenue || 0).toFixed(2)}`}
+								sub="Real-time recurring monthly revenue"
+								icon="💵"
+								trend={{ value: 'Active MRR', isPositive: true }}
+							/>
+							<StatCard
+								title="Annual Recurring Revenue (ARR)"
+								value={`$${Number(stats.annualRevenue || 0).toFixed(2)}`}
+								sub="Projected 12-month run rate"
+								icon="📈"
+								trend={{ value: 'Annualized', isPositive: true }}
+							/>
+							<StatCard
+								title="Paying Subscriber Ratio"
+								value={`${stats.active} / ${stats.totalTenants}`}
+								sub={`${stats.totalTenants > 0 ? Math.round((stats.active / stats.totalTenants) * 100) : 0}% active paying conversion`}
+								icon="👥"
+							/>
 						</div>
 					</div>
 
-					{/* Platform Scale Metrics */}
-					<h3 className="h3" style={{ marginTop: '0.75rem', marginBottom: '0.25rem' }}>Platform Utilization</h3>
-					<div className="grid grid--3">
-						<div className="card">
-							<div className="muted">Total Employee Users</div>
-							<div className="bold" style={{ fontSize: '1.4rem' }}>{stats.totalUsers}</div>
-							<div className="muted" style={{ fontSize: '0.8rem' }}>Across all business tenants</div>
+					{/* Workspace Status Distribution */}
+					<div style={{ marginBottom: '24px' }}>
+						<div
+							style={{
+								fontSize: '0.8125rem',
+								fontWeight: 700,
+								color: 'var(--muted)',
+								textTransform: 'uppercase',
+								letterSpacing: '0.5px',
+								marginBottom: '12px',
+							}}
+						>
+							Tenant Workspace Status
 						</div>
-						<div className="card">
-							<div className="muted">Cataloged Products</div>
-							<div className="bold" style={{ fontSize: '1.4rem' }}>{stats.totalProducts}</div>
-							<div className="muted" style={{ fontSize: '0.8rem' }}>Total items in tenant databases</div>
+						<div className="grid grid--4">
+							<StatCard
+								title="Total Registered Tenants"
+								value={stats.totalTenants || 0}
+								sub="All onboarded organizations"
+								icon="🏢"
+							/>
+							<StatCard
+								title="Active Commercial Workspaces"
+								value={stats.active || 0}
+								sub="Subscribers in good standing"
+								icon="✅"
+							/>
+							<StatCard
+								title="Active Trial Accounts"
+								value={stats.trial || 0}
+								sub="Prospective trial workspaces"
+								icon="⏳"
+							/>
+							<StatCard
+								title="Suspended / Expired"
+								value={(stats.suspended || 0) + (stats.expired || 0)}
+								sub="Blocked accounts requiring billing attention"
+								icon="🛑"
+							/>
 						</div>
-						<div className="card">
-							<div className="muted">Transactions Processed</div>
-							<div className="bold" style={{ fontSize: '1.4rem' }}>{stats.totalSales}</div>
-							<div className="muted" style={{ fontSize: '0.8rem' }}>Historical sales completed</div>
+					</div>
+
+					{/* Platform Usage Totals */}
+					<div>
+						<div
+							style={{
+								fontSize: '0.8125rem',
+								fontWeight: 700,
+								color: 'var(--muted)',
+								textTransform: 'uppercase',
+								letterSpacing: '0.5px',
+								marginBottom: '12px',
+							}}
+						>
+							Platform Resource Volume
+						</div>
+						<div className="grid grid--3">
+							<div className="card">
+								<div style={{ color: 'var(--muted)', fontSize: '0.8125rem', fontWeight: 600 }}>Total User Logins</div>
+								<div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{stats.totalUsers || 0}</div>
+								<div style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '2px' }}>Cashiers, managers, and tenant admins</div>
+							</div>
+							<div className="card">
+								<div style={{ color: 'var(--muted)', fontSize: '0.8125rem', fontWeight: 600 }}>Total Catalog Products</div>
+								<div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{stats.totalProducts || 0}</div>
+								<div style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '2px' }}>Active SKUs managed across all tenants</div>
+							</div>
+							<div className="card">
+								<div style={{ color: 'var(--muted)', fontSize: '0.8125rem', fontWeight: 600 }}>Total Completed Transactions</div>
+								<div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{stats.totalSales || 0}</div>
+								<div style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '2px' }}>Sales tickets processed through platform POS</div>
+							</div>
 						</div>
 					</div>
 				</>
