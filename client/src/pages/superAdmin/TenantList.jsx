@@ -274,12 +274,12 @@ export default function TenantList() {
 				maxWidth="640px"
 			>
 				{/* Step Progress Indicator */}
-				<div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+				<div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
 					{['Company Profile', 'Store Admin', 'Plan & Preset', 'Review & Quotas'].map((label, idx) => (
 						<div
 							key={idx}
 							style={{
-								flex: 1,
+								flex: '1 1 120px',
 								paddingBottom: '6px',
 								borderBottom: `3px solid ${currentStep === idx + 1 ? 'var(--primary)' : currentStep > idx + 1 ? 'var(--success)' : 'var(--border)'}`,
 								fontSize: '0.75rem',
@@ -309,7 +309,7 @@ export default function TenantList() {
 								/>
 							</div>
 
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
 								<div className="field">
 									<label className="field__label">Industry Profile *</label>
 									<select
@@ -337,7 +337,7 @@ export default function TenantList() {
 								</div>
 							</div>
 
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
 								<div className="field">
 									<label className="field__label">Business Contact Email *</label>
 									<input
@@ -430,7 +430,7 @@ export default function TenantList() {
 					{/* STEP 3: Subscription Plan */}
 					{currentStep === 3 && (
 						<div className="stack" style={{ gap: '14px' }}>
-							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
 								{[
 									{ id: 'starter', name: 'Starter', price: '$19/mo', desc: 'Single shop, basic POS' },
 									{ id: 'pro', name: 'Professional', price: '$49/mo', desc: 'Purchases, multi-cashier' },
@@ -456,7 +456,7 @@ export default function TenantList() {
 								))}
 							</div>
 
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
 								<div className="field">
 									<label className="field__label">Initial Account Status</label>
 									<select
@@ -494,7 +494,7 @@ export default function TenantList() {
 					{/* STEP 4: Resource Limits & Review */}
 					{currentStep === 4 && (
 						<div className="stack" style={{ gap: '14px' }}>
-							<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+							<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
 								<div className="field">
 									<label className="field__label">Max Users</label>
 									<input

@@ -1,15 +1,20 @@
 export default function StatCard({
 	title,
+	label,
 	value,
 	sub = null,
+	subtext = null,
 	icon = null,
 	trend = null, // { value: '+12%', isPositive: true }
 	className = '',
 }) {
+	const displayTitle = title || label
+	const displaySub = sub || subtext
+
 	return (
 		<div className={`stat-card ${className}`.trim()}>
 			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-				<div className="stat-card__title">{title}</div>
+				<div className="stat-card__title">{displayTitle}</div>
 				{icon && (
 					<div
 						style={{
@@ -27,7 +32,7 @@ export default function StatCard({
 				)}
 			</div>
 			<div className="stat-card__value">{value}</div>
-			{(sub || trend) && (
+			{(displaySub || trend) && (
 				<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
 					{trend && (
 						<span
@@ -43,7 +48,7 @@ export default function StatCard({
 							{trend.value}
 						</span>
 					)}
-					{sub && <span className="stat-card__sub">{sub}</span>}
+					{displaySub && <span className="stat-card__sub">{displaySub}</span>}
 				</div>
 			)}
 		</div>

@@ -149,21 +149,24 @@ export default function SuperAdminDashboard() {
 							Platform Resource Volume
 						</div>
 						<div className="grid grid--3">
-							<div className="card">
-								<div style={{ color: 'var(--muted)', fontSize: '0.8125rem', fontWeight: 600 }}>Total User Logins</div>
-								<div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{stats.totalUsers || 0}</div>
-								<div style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '2px' }}>Cashiers, managers, and tenant admins</div>
-							</div>
-							<div className="card">
-								<div style={{ color: 'var(--muted)', fontSize: '0.8125rem', fontWeight: 600 }}>Total Catalog Products</div>
-								<div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{stats.totalProducts || 0}</div>
-								<div style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '2px' }}>Active SKUs managed across all tenants</div>
-							</div>
-							<div className="card">
-								<div style={{ color: 'var(--muted)', fontSize: '0.8125rem', fontWeight: 600 }}>Total Completed Transactions</div>
-								<div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '4px' }}>{stats.totalSales || 0}</div>
-								<div style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '2px' }}>Sales tickets processed through platform POS</div>
-							</div>
+							<StatCard
+								title="Total User Accounts"
+								value={stats.totalUsers || 0}
+								sub="Cashiers, managers, and tenant admins"
+								icon="👥"
+							/>
+							<StatCard
+								title="Catalog SKUs Managed"
+								value={stats.totalProducts || 0}
+								sub="Active products across all tenants"
+								icon="📦"
+							/>
+							<StatCard
+								title="Completed POS Tickets"
+								value={stats.totalSales || 0}
+								sub="Total sales processed through POS"
+								icon="🧾"
+							/>
 						</div>
 					</div>
 				</>
