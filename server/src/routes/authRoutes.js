@@ -1,5 +1,5 @@
 const express = require('express')
-const { login } = require('../controllers/authController')
+const { login, me, changePassword, logout } = require('../controllers/authController')
 const auth = require('../middlewares/authMiddleware')
 const validate = require('../middlewares/validateMiddleware')
 const { loginValidator } = require('../validators/authValidator')
@@ -7,13 +7,8 @@ const { loginValidator } = require('../validators/authValidator')
 const router = express.Router()
 
 router.post('/login', validate(loginValidator), login)
-router.get('/me', auth, async (req, res, next) => {
-	try {
-		const data = await require('../services/authService').me(req.user.userId, req.user.tenantId)
-		res.json(data)
-	} catch (err) {
-		next(err)
-	}
-})
+router.get('/me', auth, me)
+router.post('/change-password', auth, changePassword)
+router.post('/logout', auth, logout)
 
 module.exports = router

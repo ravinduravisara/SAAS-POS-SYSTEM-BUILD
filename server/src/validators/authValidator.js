@@ -1,6 +1,11 @@
 function loginValidator(req) {
 	const { email, password } = req.body || {}
-	if (!email || !password) return { error: 'Email and password are required' }
+	if (!email || typeof email !== 'string' || !email.trim()) {
+		return { error: 'Valid email is required' }
+	}
+	if (!password || typeof password !== 'string') {
+		return { error: 'Password is required' }
+	}
 	return { ok: true }
 }
 

@@ -1,7 +1,12 @@
 function productCreateValidator(req) {
 	const { name, price } = req.body || {}
-	if (!name) return { error: 'Product name is required' }
-	if (price === undefined || Number.isNaN(Number(price))) return { error: 'Valid price is required' }
+	if (!name || typeof name !== 'string' || !name.trim()) {
+		return { error: 'Product name is required' }
+	}
+	const parsedPrice = Number(price)
+	if (price === undefined || Number.isNaN(parsedPrice) || parsedPrice < 0) {
+		return { error: 'Valid non-negative price is required' }
+	}
 	return { ok: true }
 }
 
