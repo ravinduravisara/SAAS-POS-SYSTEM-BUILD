@@ -114,3 +114,4 @@ While the system contains extensive multi-tenant capabilities, feature gating, a
 - **Primary Brand**: `#4F46E5` (Indigo 600), Hover: `#4338CA` (Indigo 700)
 - **Typography**: Inter / System UI, 14px body, 12px secondary, 16px/20px/24px headings.
 - **Interactive Feedback**: Default, Hover, Focus (accessible outline), Disabled, and Loading states for all buttons and inputs.
+

@@ -108,3 +108,4 @@ If any sub-operation fails, all partially committed records are automatically cl
    - If credentials are missing or the database connection drops, throw a fatal `503 Service Unavailable` error and crash/refuse traffic.
    - Never fall back to in-memory temporary storage in production.
 2. Added `/ready` readiness probe to verify live database connectivity before routing user requests.
+

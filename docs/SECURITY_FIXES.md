@@ -53,3 +53,4 @@ Unsafe test mocks or in-memory tables becoming active in production environments
 ### Remediation
 - In `server/src/config/db.js`, any attempt to set `USE_MOCK_DB=true` while `NODE_ENV=production` triggers an immediate fatal startup error (`[SECURITY FATAL] USE_MOCK_DB cannot be enabled in production environment`).
 - Startup fails immediately if production secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) are omitted.
+

@@ -56,3 +56,4 @@
 
 ### `LoadingSkeleton` & `EmptyState` (`client/src/components/common/LoadingSkeleton.jsx`, `EmptyState.jsx`)
 - Eliminates jarring layout shifts during data loading and provides informative empty state illustrations with action buttons.
+
