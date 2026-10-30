@@ -19,7 +19,21 @@ export default function Inventory() {
 	}
 
 	useEffect(() => {
-		load()
+		let active = true
+		inventoryService
+			.list()
+			.then((data) => {
+				if (active) {
+					setItems(data)
+					setError(null)
+				}
+			})
+			.catch((e) => {
+				if (active) setError(e?.response?.data?.message || e?.message || 'Failed to load inventory')
+			})
+		return () => {
+			active = false
+		}
 	}, [])
 
 	return (

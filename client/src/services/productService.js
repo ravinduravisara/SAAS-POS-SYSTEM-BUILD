@@ -22,4 +22,5 @@ const productService = {
 	},
 }
 
+export const getProducts = () => productService.getAll()
 export default productService

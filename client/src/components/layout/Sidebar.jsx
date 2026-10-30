@@ -3,23 +3,25 @@ import { usePlan } from '../../hooks/usePlan'
 
 const links = [
 	{ to: '/dashboard', label: 'Home' },
-	{ to: '/dashboard/pos', label: 'POS' },
+	{ to: '/dashboard/pos', label: 'POS Terminal', feature: 'pos.core' },
+	{ to: '/dashboard/sales', label: 'Sales & Invoices', feature: 'sales.history' },
 	{ to: '/dashboard/products', label: 'Products' },
 	{ to: '/dashboard/categories', label: 'Categories' },
-	{ to: '/dashboard/inventory', label: 'Inventory', feature: 'inventoryManagement' },
+	{ to: '/dashboard/inventory', label: 'Inventory', feature: 'inventory.core' },
 	{ to: '/dashboard/customers', label: 'Customers' },
-	{ to: '/dashboard/sales', label: 'Sales' },
-	{ to: '/dashboard/purchases', label: 'Purchases', feature: 'purchaseManagement' },
-	{ to: '/dashboard/expenses', label: 'Expenses', feature: 'expenseManagement' },
-	{ to: '/dashboard/reports', label: 'Reports', feature: 'reports' },
-	{ to: '/dashboard/users', label: 'Users' },
+	{ to: '/dashboard/purchases', label: 'Purchases (GRN)', feature: 'purchases.core' },
+	{ to: '/dashboard/expenses', label: 'Expenses', feature: 'finance.expenses' },
+	{ to: '/dashboard/reports', label: 'Reports', feature: 'reports.advanced' },
+	{ to: '/dashboard/restaurant', label: 'Restaurant & KDS', feature: 'restaurant.core' },
+	{ to: '/dashboard/repairs', label: 'Service Center & Repairs', feature: 'repairs.jobCards' },
+	{ to: '/dashboard/salon', label: 'Salon & Bookings', feature: 'salon.appointments' },
+	{ to: '/dashboard/hrm', label: 'HRM & Payroll', feature: 'hrm.core' },
+	{ to: '/dashboard/users', label: 'Employees' },
 	{ to: '/dashboard/settings', label: 'Settings' },
 ]
 
 export default function Sidebar() {
-	return (
-		<SidebarInner className="sidebar" />
-	)
+	return <SidebarInner className="sidebar" />
 }
 
 export function SidebarInner({ className = 'sidebar', onNavigate }) {

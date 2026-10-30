@@ -15,7 +15,18 @@ export default function Users() {
 	}
 
 	useEffect(() => {
-		load()
+		let active = true
+		userService
+			.getAll()
+			.then((data) => {
+				if (active) {
+					setItems(data)
+				}
+			})
+			.catch(() => {})
+		return () => {
+			active = false
+		}
 	}, [])
 
 	const columns = useMemo(

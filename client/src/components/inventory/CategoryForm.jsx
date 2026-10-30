@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Button from '../common/Button.jsx'
 import Input from '../common/Input.jsx'
 import categoryService from '../../services/categoryService'
 
 export default function CategoryForm({ initial, onDone }) {
-	const [name, setName] = useState('')
+	const [prevInitial, setPrevInitial] = useState(initial)
+	const [name, setName] = useState(initial?.name || '')
 
-	useEffect(() => {
+	if (initial !== prevInitial) {
+		setPrevInitial(initial)
 		setName(initial?.name || '')
-	}, [initial])
+	}
 
 	async function onSubmit(e) {
 		e.preventDefault()

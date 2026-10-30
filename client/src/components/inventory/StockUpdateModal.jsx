@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Modal from '../common/Modal.jsx'
 import Input from '../common/Input.jsx'
 import Button from '../common/Button.jsx'
 
 export default function StockUpdateModal({ open, product, onClose, onSave }) {
-	const [stock, setStock] = useState('')
+	const [prevProduct, setPrevProduct] = useState(product)
+	const [stock, setStock] = useState(product?.stock ?? '')
 
-	useEffect(() => {
+	if (product !== prevProduct) {
+		setPrevProduct(product)
 		setStock(product?.stock ?? '')
-	}, [product])
+	}
 
 	return (
 		<Modal title="Update Stock" open={open} onClose={onClose}>
@@ -23,9 +25,9 @@ export default function StockUpdateModal({ open, product, onClose, onSave }) {
 				<Button
 					onClick={() =>
 						onSave?.({
-						productId: product?.id,
-						stock: Number(stock || 0),
-					})
+							productId: product?.id,
+							stock: Number(stock || 0),
+						})
 					}
 				>
 					Save

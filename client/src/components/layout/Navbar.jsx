@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import Button from '../common/Button.jsx'
@@ -9,7 +10,11 @@ export default function Navbar({ onMenu }) {
 	const subscription = useSelector((state) => state.auth.subscription)
 	const plan = tenant?.plan || subscription?.plan || 'starter'
 	const trialEndsAt = tenant?.trialEndsAt || subscription?.trialEndsAt
-	const trialDays = trialEndsAt ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null
+	const [now] = useState(() => Date.now())
+
+	const trialDays = trialEndsAt && now > 0
+		? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - now) / (1000 * 60 * 60 * 24)))
+		: null
 
 	return (
 		<div>

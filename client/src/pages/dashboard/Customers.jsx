@@ -21,7 +21,21 @@ export default function Customers() {
 	}
 
 	useEffect(() => {
-		load()
+		let active = true
+		customerService
+			.getAll()
+			.then((data) => {
+				if (active) {
+					setItems(data)
+					setError(null)
+				}
+			})
+			.catch((e) => {
+				if (active) setError(e?.response?.data?.message || e?.message || 'Failed to load customers')
+			})
+		return () => {
+			active = false
+		}
 	}, [])
 
 	const columns = useMemo(

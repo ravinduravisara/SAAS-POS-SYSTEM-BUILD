@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useDispatch } from 'react-redux'
 import Button from '../common/Button.jsx'
 import Input from '../common/Input.jsx'
@@ -6,19 +6,21 @@ import { createProduct, updateProduct } from '../../store/slices/productSlice'
 
 export default function ProductForm({ initial, categories = [], onDone }) {
 	const dispatch = useDispatch()
-	const [name, setName] = useState('')
-	const [sku, setSku] = useState('')
-	const [price, setPrice] = useState(0)
-	const [stock, setStock] = useState(0)
-	const [categoryId, setCategoryId] = useState('')
+	const [prevInitial, setPrevInitial] = useState(initial)
+	const [name, setName] = useState(initial?.name || '')
+	const [sku, setSku] = useState(initial?.sku || '')
+	const [price, setPrice] = useState(Number(initial?.price || 0))
+	const [stock, setStock] = useState(Number(initial?.stock || 0))
+	const [categoryId, setCategoryId] = useState(initial?.categoryId || '')
 
-	useEffect(() => {
+	if (initial !== prevInitial) {
+		setPrevInitial(initial)
 		setName(initial?.name || '')
 		setSku(initial?.sku || '')
 		setPrice(Number(initial?.price || 0))
 		setStock(Number(initial?.stock || 0))
 		setCategoryId(initial?.categoryId || '')
-	}, [initial])
+	}
 
 	async function onSubmit(e) {
 		e.preventDefault()
@@ -49,22 +51,25 @@ export default function ProductForm({ initial, categories = [], onDone }) {
 				step="1"
 				value={stock}
 				onChange={(e) => setStock(e.target.value)}
+				required
 			/>
-
-			<label className="field">
-				<span className="field__label">Category</span>
-				<select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-					<option value="">None</option>
+			<div>
+				<label className="label">Category</label>
+				<select
+					className="input"
+					value={categoryId}
+					onChange={(e) => setCategoryId(e.target.value)}
+				>
+					<option value="">(None)</option>
 					{categories.map((c) => (
 						<option key={c.id} value={c.id}>
 							{c.name}
 						</option>
 					))}
 				</select>
-			</label>
-
+			</div>
 			<div className="row row--space">
-				<div className="muted">{initial?.id ? 'Update product details' : 'Create a new product'}</div>
+				<div className="muted">{initial?.id ? 'Update product' : 'Create product'}</div>
 				<Button type="submit">Save</Button>
 			</div>
 		</form>

@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Button from '../common/Button.jsx'
 import Input from '../common/Input.jsx'
 import customerService from '../../services/customerService'
 
 export default function CustomerForm({ initial, onDone }) {
-	const [name, setName] = useState('')
-	const [phone, setPhone] = useState('')
-	const [email, setEmail] = useState('')
+	const [prevInitial, setPrevInitial] = useState(initial)
+	const [name, setName] = useState(initial?.name || '')
+	const [phone, setPhone] = useState(initial?.phone || '')
+	const [email, setEmail] = useState(initial?.email || '')
 
-	useEffect(() => {
+	if (initial !== prevInitial) {
+		setPrevInitial(initial)
 		setName(initial?.name || '')
 		setPhone(initial?.phone || '')
 		setEmail(initial?.email || '')
-	}, [initial])
+	}
 
 	async function onSubmit(e) {
 		e.preventDefault()

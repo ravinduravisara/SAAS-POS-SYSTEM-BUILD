@@ -20,6 +20,11 @@ import Reports from '../pages/dashboard/Reports.jsx'
 import Users from '../pages/dashboard/Users.jsx'
 import Settings from '../pages/dashboard/Settings.jsx'
 import NotFound from '../pages/dashboard/NotFound.jsx'
+import RestaurantPOS from '../pages/dashboard/RestaurantPOS.jsx'
+import RepairJobs from '../pages/dashboard/RepairJobs.jsx'
+import SalonAppointments from '../pages/dashboard/SalonAppointments.jsx'
+import HRMManagement from '../pages/dashboard/HRMManagement.jsx'
+import PlanGate from '../components/common/PlanGate.jsx'
 import SuperAdminLayout from '../components/superAdmin/SuperAdminLayout.jsx'
 import SuperAdminDashboard from '../pages/superAdmin/SuperAdminDashboard.jsx'
 import TenantList from '../pages/superAdmin/TenantList.jsx'
@@ -61,6 +66,38 @@ export default function AppRoutes() {
 					<Route path="purchases" element={<Purchases />} />
 					<Route path="expenses" element={<Expenses />} />
 					<Route path="reports" element={<Reports />} />
+					<Route
+						path="restaurant"
+						element={
+							<PlanGate feature="restaurant.core">
+								<RestaurantPOS />
+							</PlanGate>
+						}
+					/>
+					<Route
+						path="repairs"
+						element={
+							<PlanGate feature="repairs.jobCards">
+								<RepairJobs />
+							</PlanGate>
+						}
+					/>
+					<Route
+						path="salon"
+						element={
+							<PlanGate feature="salon.appointments">
+								<SalonAppointments />
+							</PlanGate>
+						}
+					/>
+					<Route
+						path="hrm"
+						element={
+							<PlanGate feature="hrm.core">
+								<HRMManagement />
+							</PlanGate>
+						}
+					/>
 					<Route path="users" element={<Users />} />
 					<Route path="settings" element={<Settings />} />
 				</Route>

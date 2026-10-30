@@ -21,7 +21,21 @@ export default function Categories() {
 	}
 
 	useEffect(() => {
-		load()
+		let active = true
+		categoryService
+			.getAll()
+			.then((data) => {
+				if (active) {
+					setCategories(data)
+					setError(null)
+				}
+			})
+			.catch((e) => {
+				if (active) setError(e?.response?.data?.message || e?.message || 'Failed to load categories')
+			})
+		return () => {
+			active = false
+		}
 	}, [])
 
 	const columns = useMemo(
