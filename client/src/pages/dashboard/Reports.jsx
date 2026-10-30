@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import StatCard from '../../components/common/StatCard.jsx'
 import PlanGate from '../../components/common/PlanGate.jsx'
 import Button from '../../components/common/Button.jsx'
 import reportService from '../../services/reportService'
@@ -37,11 +39,12 @@ export default function Reports() {
 			params.startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 		}
 
+		setLoading(true)
 		reportService
 			.getSummary(params)
 			.then((res) => {
 				if (active) {
-					setData(res)
+					setData(res || {})
 					setLoading(false)
 				}
 			})
@@ -63,107 +66,166 @@ export default function Reports() {
 		}
 	}
 
+	const totalPaymentVolume =
+		(data.paymentBreakdown?.cash || 0) +
+		(data.paymentBreakdown?.card || 0) +
+		(data.paymentBreakdown?.bankTransfer || 0) +
+		(data.paymentBreakdown?.split || 0) || 1
+
 	return (
 		<PlanGate feature="reports">
 			<div className="stack">
-				<div className="row row--space">
-					<div>
-						<h2 className="h2" style={{ margin: 0 }}>Business Analytics & Financial Reports</h2>
-						<div className="muted">Sales trends, operating profitability, and product velocity.</div>
-					</div>
-					<div className="row" style={{ gap: '0.5rem' }}>
-						<select
-							className="input"
-							value={range}
-							onChange={(e) => setRange(e.target.value)}
-							style={{ width: '150px' }}
-						>
-							<option value="all">All Time</option>
-							<option value="today">Today</option>
-							<option value="week">Last 7 Days</option>
-							<option value="month">This Month</option>
-						</select>
-						<Button variant="secondary" onClick={handleExport} disabled={exporting}>
-							{exporting ? 'Exporting...' : '📥 Export CSV'}
-						</Button>
-					</div>
-				</div>
+				<PageHeader
+					title="Financial Analytics & Reports"
+					subtitle="Sales performance trends, operating profit margins, tax obligations, and product velocity."
+					actions={
+						<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+							<select
+								className="input"
+								value={range}
+								onChange={(e) => setRange(e.target.value)}
+								style={{ width: '140px', padding: '0.45rem 0.6rem' }}
+							>
+								<option value="all">All Time</option>
+								<option value="today">Today</option>
+								<option value="week">Last 7 Days</option>
+								<option value="month">This Month</option>
+							</select>
+							<Button variant="secondary" onClick={handleExport} disabled={exporting}>
+								{exporting ? 'Exporting...' : '📥 Export CSV'}
+							</Button>
+						</div>
+					}
+				/>
 
 				{loading ? (
-					<div className="card muted">Calculating financial aggregates...</div>
+					<div className="card" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+						Calculating business financial metrics...
+					</div>
 				) : (
 					<>
 						{/* Top Financial KPI Metrics */}
 						<div className="grid grid--4">
-							<div className="card" style={{ borderLeft: '4px solid #0f766e' }}>
-								<div className="muted">Total Sales Revenue</div>
-								<div className="bold" style={{ fontSize: '1.6rem', color: '#0f766e' }}>
-									{formatCurrency(data.revenue)}
-								</div>
-								<div className="muted" style={{ fontSize: '0.8rem' }}>{data.sales} completed transactions</div>
-							</div>
-							<div className="card" style={{ borderLeft: '4px solid #16a34a' }}>
-								<div className="muted">Net Operating Profit</div>
-								<div className="bold" style={{ fontSize: '1.6rem', color: data.netProfit >= 0 ? '#16a34a' : '#dc2626' }}>
-									{formatCurrency(data.netProfit)}
-								</div>
-								<div className="muted" style={{ fontSize: '0.8rem' }}>Revenue minus recorded expenses</div>
-							</div>
-							<div className="card" style={{ borderLeft: '4px solid #dc2626' }}>
-								<div className="muted">Total Expenses</div>
-								<div className="bold" style={{ fontSize: '1.6rem', color: '#dc2626' }}>
-									{formatCurrency(data.expensesTotal)}
-								</div>
-								<div className="muted" style={{ fontSize: '0.8rem' }}>Operating overheads recorded</div>
-							</div>
-							<div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
-								<div className="muted">Taxes Collected</div>
-								<div className="bold" style={{ fontSize: '1.6rem', color: '#2563eb' }}>
-									{formatCurrency(data.taxTotal)}
-								</div>
-								<div className="muted" style={{ fontSize: '0.8rem' }}>Cumulative sales tax liabilities</div>
-							</div>
+							<StatCard
+								label="Total Sales Revenue"
+								value={formatCurrency(data.revenue)}
+								subtext={`${data.sales} completed transactions`}
+								icon="💰"
+							/>
+							<StatCard
+								label="Net Operating Profit"
+								value={formatCurrency(data.netProfit)}
+								subtext="Revenue minus recorded expenses"
+								icon={data.netProfit >= 0 ? '📈' : '📉'}
+							/>
+							<StatCard
+								label="Total Overhead Expenses"
+								value={formatCurrency(data.expensesTotal)}
+								subtext="Operating costs recorded"
+								icon="🧾"
+							/>
+							<StatCard
+								label="Sales Tax Collected"
+								value={formatCurrency(data.taxTotal)}
+								subtext="Liabilities payable"
+								icon="🏛️"
+							/>
 						</div>
 
 						{/* Payment Channel Breakdown & Top Products */}
 						<div className="grid grid--2">
-							<div className="card stack">
-								<h3 className="h3" style={{ margin: 0 }}>Sales by Payment Channel</h3>
-								<div className="stack" style={{ gap: '0.75rem', marginTop: '0.5rem' }}>
-									<div className="row row--space">
-										<span>💵 Cash</span>
-										<strong>{formatCurrency(data.paymentBreakdown?.cash || 0)}</strong>
-									</div>
-									<div className="row row--space">
-										<span>💳 Card Terminal</span>
-										<strong>{formatCurrency(data.paymentBreakdown?.card || 0)}</strong>
-									</div>
-									<div className="row row--space">
-										<span>🏦 Bank Transfer / QR</span>
-										<strong>{formatCurrency(data.paymentBreakdown?.bankTransfer || 0)}</strong>
-									</div>
-									<div className="row row--space">
-										<span>⚡ Split Payment</span>
-										<strong>{formatCurrency(data.paymentBreakdown?.split || 0)}</strong>
-									</div>
+							{/* Payment Method Distribution */}
+							<div className="card" style={{ padding: '1.25rem' }}>
+								<div style={{ fontWeight: 600, fontSize: '1.05rem', color: '#0f172a', marginBottom: '1rem' }}>
+									Revenue by Payment Channel
+								</div>
+								<div className="stack" style={{ gap: '1rem' }}>
+									{[
+										{ label: '💵 Cash Register', val: data.paymentBreakdown?.cash || 0, color: '#10b981' },
+										{ label: '💳 Card Terminal', val: data.paymentBreakdown?.card || 0, color: '#4f46e5' },
+										{ label: '🏦 Bank Transfer / QR', val: data.paymentBreakdown?.bankTransfer || 0, color: '#0284c7' },
+										{ label: '⚡ Split Payment', val: data.paymentBreakdown?.split || 0, color: '#d97706' },
+									].map((channel, idx) => {
+										const pct = Math.round((channel.val / totalPaymentVolume) * 100)
+										return (
+											<div key={idx} className="stack" style={{ gap: '4px' }}>
+												<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+													<span style={{ fontWeight: 500, color: '#334155' }}>{channel.label}</span>
+													<span style={{ fontWeight: 600, color: '#0f172a' }}>
+														{formatCurrency(channel.val)}{' '}
+														<span style={{ color: '#64748b', fontWeight: 400 }}>({pct}%)</span>
+													</span>
+												</div>
+												<div
+													style={{
+														height: '6px',
+														backgroundColor: '#f1f5f9',
+														borderRadius: '3px',
+														overflow: 'hidden',
+													}}
+												>
+													<div
+														style={{
+															width: `${pct}%`,
+															height: '100%',
+															backgroundColor: channel.color,
+															borderRadius: '3px',
+														}}
+													/>
+												</div>
+											</div>
+										)
+									})}
 								</div>
 							</div>
 
-							<div className="card stack">
-								<h3 className="h3" style={{ margin: 0 }}>Top Selling Products</h3>
-								{data.topProducts?.length === 0 ? (
-									<div className="muted">No sales items recorded yet.</div>
+							{/* Top Performing Products */}
+							<div className="card" style={{ padding: '1.25rem' }}>
+								<div style={{ fontWeight: 600, fontSize: '1.05rem', color: '#0f172a', marginBottom: '1rem' }}>
+									Top Performing Products
+								</div>
+								{!data.topProducts || data.topProducts.length === 0 ? (
+									<div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b' }}>
+										No product sales recorded in this period.
+									</div>
 								) : (
-									<div className="stack" style={{ gap: '0.5rem', marginTop: '0.5rem' }}>
+									<div className="stack" style={{ gap: '0.75rem' }}>
 										{data.topProducts.map((p, idx) => (
-											<div key={idx} className="row row--space" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
-												<div>
-													<span className="bold">{p.name}</span>
-													<span className="muted" style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
-														({p.quantity} units)
+											<div
+												key={idx}
+												style={{
+													display: 'flex',
+													alignItems: 'center',
+													justifyContent: 'space-between',
+													paddingBottom: '0.5rem',
+													borderBottom: idx < data.topProducts.length - 1 ? '1px solid #f1f5f9' : 'none',
+												}}
+											>
+												<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+													<span
+														style={{
+															width: '24px',
+															height: '24px',
+															borderRadius: '50%',
+															backgroundColor: idx === 0 ? '#fef3c7' : '#f1f5f9',
+															color: idx === 0 ? '#b45309' : '#64748b',
+															fontWeight: 700,
+															fontSize: '0.75rem',
+															display: 'flex',
+															alignItems: 'center',
+															justifyContent: 'center',
+														}}
+													>
+														#{idx + 1}
 													</span>
+													<div>
+														<div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#0f172a' }}>{p.name}</div>
+														<div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.quantity} units sold</div>
+													</div>
 												</div>
-												<strong style={{ color: '#0f766e' }}>{formatCurrency(p.revenue)}</strong>
+												<div style={{ fontWeight: 700, color: '#4f46e5', fontSize: '0.95rem' }}>
+													{formatCurrency(p.revenue)}
+												</div>
 											</div>
 										))}
 									</div>
@@ -171,22 +233,39 @@ export default function Reports() {
 							</div>
 						</div>
 
-						{/* Daily Sales Velocity Trend */}
-						{data.dailyTrends?.length > 0 ? (
-							<div className="card stack">
-								<h3 className="h3" style={{ margin: 0 }}>Daily Revenue History</h3>
-								<div className="grid grid--4" style={{ gap: '0.5rem', marginTop: '0.5rem' }}>
+						{/* Daily Sales Trend History */}
+						{data.dailyTrends && data.dailyTrends.length > 0 && (
+							<div className="card" style={{ padding: '1.25rem' }}>
+								<div style={{ fontWeight: 600, fontSize: '1.05rem', color: '#0f172a', marginBottom: '1rem' }}>
+									Daily Revenue History
+								</div>
+								<div
+									style={{
+										display: 'grid',
+										gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+										gap: '10px',
+									}}
+								>
 									{data.dailyTrends.map((d, i) => (
-										<div key={i} style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', textAlign: 'center' }}>
-											<div className="muted" style={{ fontSize: '0.8rem' }}>{d.date}</div>
-											<div className="bold" style={{ color: '#0f766e', marginTop: '0.2rem' }}>
+										<div
+											key={i}
+											style={{
+												backgroundColor: '#f8fafc',
+												border: '1px solid #e2e8f0',
+												borderRadius: '6px',
+												padding: '0.75rem',
+												textAlign: 'center',
+											}}
+										>
+											<div style={{ fontSize: '0.75rem', color: '#64748b' }}>{d.date}</div>
+											<div style={{ fontWeight: 700, color: '#0f172a', marginTop: '4px', fontSize: '0.95rem' }}>
 												{formatCurrency(d.revenue)}
 											</div>
 										</div>
 									))}
 								</div>
 							</div>
-						) : null}
+						)}
 					</>
 				)}
 			</div>

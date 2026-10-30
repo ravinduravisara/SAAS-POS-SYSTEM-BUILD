@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/common/Button.jsx'
 import Modal from '../../components/common/Modal.jsx'
-import Table from '../../components/common/Table.jsx'
-import Input from '../../components/common/Input.jsx'
+import DataTable from '../../components/common/DataTable.jsx'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import StatusBadge from '../../components/common/StatusBadge.jsx'
 import PlanGate from '../../components/common/PlanGate.jsx'
 import purchaseService from '../../services/purchaseService'
 import supplierService from '../../services/supplierService'
@@ -17,6 +18,7 @@ export default function Purchases() {
 	const [products, setProducts] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(null)
+	const [searchQuery, setSearchQuery] = useState('')
 
 	// New Purchase Form state
 	const [newPurchaseOpen, setNewPurchaseOpen] = useState(false)
@@ -25,6 +27,7 @@ export default function Purchases() {
 	const [purchaseLines, setPurchaseLines] = useState([
 		{ productId: '', name: '', quantity: 1, costPrice: 0 },
 	])
+	const [submitting, setSubmitting] = useState(false)
 
 	// New Supplier Form state
 	const [supplierModalOpen, setSupplierModalOpen] = useState(false)
@@ -44,9 +47,9 @@ export default function Purchases() {
 			productService.getAll().catch(() => []),
 		]).then(([purchData, suppData, prodData]) => {
 			if (active) {
-				setPurchases(purchData)
-				setSuppliers(suppData)
-				setProducts(prodData)
+				setPurchases(purchData || [])
+				setSuppliers(suppData || [])
+				setProducts(prodData || [])
 				setLoading(false)
 			}
 		})
@@ -57,14 +60,17 @@ export default function Purchases() {
 
 	async function reloadData() {
 		try {
+			setLoading(true)
 			const [purchData, suppData] = await Promise.all([
 				purchaseService.getAll(),
 				supplierService.getAll(),
 			])
-			setPurchases(purchData)
-			setSuppliers(suppData)
+			setPurchases(purchData || [])
+			setSuppliers(suppData || [])
 		} catch (e) {
 			setError(e?.response?.data?.message || e?.message || 'Failed to reload data')
+		} finally {
+			setLoading(false)
 		}
 	}
 
@@ -83,7 +89,7 @@ export default function Purchases() {
 				const prod = products.find((p) => p.id === value)
 				if (prod) {
 					copy[index].name = prod.name
-					copy[index].costPrice = prod.costPrice || prod.price || 0
+					copy[index].costPrice = Number(prod.cost || prod.price || 0)
 				}
 			}
 			return copy
@@ -96,27 +102,37 @@ export default function Purchases() {
 
 	const purchaseGrandTotal = useMemo(() => {
 		return purchaseLines.reduce((sum, line) => {
-			const qty = Number(line.quantity || 0)
-			const price = Number(line.costPrice || 0)
-			return sum + qty * price
+			return sum + Number(line.costPrice || 0) * Number(line.quantity || 1)
 		}, 0)
 	}, [purchaseLines])
 
-	async function submitPurchase(e) {
+	async function handleSubmitPurchase(e) {
 		e.preventDefault()
+		if (!selectedSupplierId) {
+			setError('Please select a supplier')
+			return
+		}
+		const validLines = purchaseLines.filter((l) => l.productId && l.quantity > 0)
+		if (validLines.length === 0) {
+			setError('Please select at least one valid product line to receive')
+			return
+		}
+
+		setSubmitting(true)
 		setError(null)
 		try {
-			const validItems = purchaseLines.filter((l) => l.productId && Number(l.quantity) > 0)
-			if (validItems.length === 0) {
-				setError('Please select at least one product with valid quantity')
-				return
-			}
-			const supp = suppliers.find((s) => s.id === selectedSupplierId)
+			const supplier = suppliers.find((s) => s.id === selectedSupplierId)
 			await purchaseService.create({
-				supplierId: selectedSupplierId || null,
-				supplierName: supp?.name || 'General Supplier',
+				supplierId: selectedSupplierId,
+				supplierName: supplier?.name || 'Supplier',
+				items: validLines.map((l) => ({
+					productId: l.productId,
+					name: l.name,
+					quantity: Number(l.quantity),
+					costPrice: Number(l.costPrice),
+				})),
+				totalCost: purchaseGrandTotal,
 				notes: purchaseNotes,
-				items: validItems,
 			})
 			setNewPurchaseOpen(false)
 			setPurchaseLines([{ productId: '', name: '', quantity: 1, costPrice: 0 }])
@@ -124,13 +140,14 @@ export default function Purchases() {
 			setPurchaseNotes('')
 			await reloadData()
 		} catch (err) {
-			setError(err?.response?.data?.message || err?.message || 'Failed to create purchase')
+			setError(err?.response?.data?.message || err?.message || 'Failed to record purchase')
+		} finally {
+			setSubmitting(false)
 		}
 	}
 
-	async function submitSupplier(e) {
+	async function handleSubmitSupplier(e) {
 		e.preventDefault()
-		setError(null)
 		try {
 			await supplierService.create(supplierForm)
 			setSupplierModalOpen(false)
@@ -143,262 +160,368 @@ export default function Purchases() {
 			})
 			await reloadData()
 		} catch (err) {
-			setError(err?.response?.data?.message || err?.message || 'Failed to add supplier')
+			setError(err?.response?.data?.message || err?.message || 'Failed to save supplier')
 		}
 	}
 
-	const purchaseColumns = useMemo(
-		() => [
-			{ header: 'PO / Ref', key: 'id' },
-			{
-				header: 'Date',
-				key: 'createdAt',
-				render: (row) => formatDate(row.createdAt),
-			},
-			{ header: 'Supplier', key: 'supplierName' },
-			{
-				header: 'Items Count',
-				key: 'items',
-				render: (row) => (row.items || []).length,
-			},
-			{
-				header: 'Total Cost',
-				key: 'total',
-				render: (row) => <strong>{formatCurrency(row.total)}</strong>,
-			},
-			{
-				header: 'Status',
-				key: 'status',
-				render: (row) => (
-					<span
-						style={{
-							padding: '3px 8px',
-							borderRadius: '4px',
-							fontSize: '0.8rem',
-							fontWeight: 'bold',
-							backgroundColor: '#dcfce7',
-							color: '#166534',
-						}}
-					>
-						{String(row.status || 'received').toUpperCase()}
-					</span>
-				),
-			},
-		],
-		[],
-	)
+	const filteredPurchases = useMemo(() => {
+		return purchases.filter((p) => {
+			return (
+				!searchQuery ||
+				(p.id && p.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+				(p.supplierName && p.supplierName.toLowerCase().includes(searchQuery.toLowerCase()))
+			)
+		})
+	}, [purchases, searchQuery])
 
-	const supplierColumns = useMemo(
-		() => [
-			{ header: 'Supplier Name', key: 'name' },
-			{ header: 'Contact Person', key: 'contactName' },
-			{ header: 'Phone', key: 'phone' },
-			{ header: 'Email', key: 'email' },
-			{
-				header: 'Terms',
-				key: 'paymentTerms',
-				render: (row) => (
-					<span className="badge" style={{ textTransform: 'uppercase' }}>
-						{row.paymentTerms}
-					</span>
-				),
-			},
-		],
-		[],
-	)
+	const purchaseColumns = [
+		{
+			key: 'id',
+			label: 'GRN Number',
+			render: (p) => (
+				<div>
+					<div style={{ fontFamily: 'monospace', fontWeight: 600 }}>#{p.id.slice(0, 8)}</div>
+					<div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{formatDate(p.createdAt)}</div>
+				</div>
+			),
+		},
+		{
+			key: 'supplier',
+			label: 'Supplier',
+			render: (p) => <span style={{ fontWeight: 600 }}>{p.supplierName || 'Unknown Vendor'}</span>,
+		},
+		{
+			key: 'items',
+			label: 'Items Received',
+			render: (p) => <span>{p.items?.length || 1} line item(s)</span>,
+		},
+		{
+			key: 'total',
+			label: 'Total Cost',
+			render: (p) => (
+				<strong style={{ color: 'var(--text)' }}>
+					{formatCurrency(p.totalCost || p.total || 0)}
+				</strong>
+			),
+		},
+		{
+			key: 'status',
+			label: 'Status',
+			render: (p) => <StatusBadge status={p.status || 'received'} />,
+		},
+	]
+
+	const supplierColumns = [
+		{
+			key: 'name',
+			label: 'Supplier Name',
+			render: (s) => (
+				<div>
+					<div style={{ fontWeight: 600 }}>{s.name}</div>
+					{s.contactName && <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Attn: {s.contactName}</div>}
+				</div>
+			),
+		},
+		{
+			key: 'phone',
+			label: 'Phone Number',
+			render: (s) => <span>{s.phone || '-'}</span>,
+		},
+		{
+			key: 'email',
+			label: 'Email',
+			render: (s) => <span>{s.email || '-'}</span>,
+		},
+		{
+			key: 'terms',
+			label: 'Payment Terms',
+			render: (s) => (
+				<span style={{ textTransform: 'uppercase', fontSize: '0.75rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: '4px' }}>
+					{s.paymentTerms || 'Net 30'}
+				</span>
+			),
+		},
+	]
 
 	return (
-		<PlanGate feature="purchaseManagement">
-			<div className="stack">
-				<div className="row row--space">
-					<div>
-						<h2 className="h2" style={{ margin: 0 }}>Procurement & Purchasing</h2>
-						<div className="muted">Manage suppliers, purchase orders, and goods receiving.</div>
-					</div>
-					<div className="row" style={{ gap: '0.5rem' }}>
-						{activeTab === 'purchases' ? (
-							<Button onClick={() => setNewPurchaseOpen(true)}>+ Receive Goods (GRN)</Button>
-						) : (
-							<Button onClick={() => setSupplierModalOpen(true)}>+ Add Supplier</Button>
-						)}
-					</div>
-				</div>
+		<PlanGate feature="purchases.core">
+			<div>
+				<PageHeader
+					title="Purchasing & Goods Received Notes (GRN)"
+					subtitle="Manage vendor orders, receive incoming inventory stock, and track vendor directory."
+					actions={
+						<div style={{ display: 'flex', gap: '8px' }}>
+							<Button variant="secondary" onClick={() => setSupplierModalOpen(true)}>
+								+ New Supplier
+							</Button>
+							<Button variant="primary" onClick={() => setNewPurchaseOpen(true)}>
+								+ Receive Stock (GRN)
+							</Button>
+						</div>
+					}
+				/>
 
-				{error ? <div className="card error">{error}</div> : null}
-
-				<div className="row" style={{ gap: '0.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
-					<Button
-						variant={activeTab === 'purchases' ? 'primary' : 'secondary'}
-						onClick={() => setActiveTab('purchases')}
+				{error && (
+					<div
+						style={{
+							padding: '12px 16px',
+							background: 'var(--danger-light)',
+							border: '1px solid #fecaca',
+							color: 'var(--danger)',
+							borderRadius: '8px',
+							marginBottom: '16px',
+							fontSize: '0.875rem',
+						}}
 					>
-						Purchase Orders & History ({purchases.length})
-					</Button>
-					<Button
-						variant={activeTab === 'suppliers' ? 'primary' : 'secondary'}
-						onClick={() => setActiveTab('suppliers')}
-					>
-						Suppliers ({suppliers.length})
-					</Button>
-				</div>
-
-				{loading ? (
-					<div className="card muted">Loading data...</div>
-				) : activeTab === 'purchases' ? (
-					<Table columns={purchaseColumns} data={purchases} />
-				) : (
-					<Table columns={supplierColumns} data={suppliers} />
+						{error}
+					</div>
 				)}
 
-				{/* Receive Goods (GRN) Modal */}
+				{/* Tab Selector */}
+				<div className="card" style={{ padding: '12px 16px', marginBottom: '16px' }}>
+					<div style={{ display: 'flex', gap: '8px' }}>
+						<button
+							type="button"
+							className={`btn btn--sm ${activeTab === 'purchases' ? 'btn--primary' : 'btn--secondary'}`}
+							onClick={() => setActiveTab('purchases')}
+						>
+							Goods Received Notes (GRN) ({purchases.length})
+						</button>
+						<button
+							type="button"
+							className={`btn btn--sm ${activeTab === 'suppliers' ? 'btn--primary' : 'btn--secondary'}`}
+							onClick={() => setActiveTab('suppliers')}
+						>
+							Suppliers Directory ({suppliers.length})
+						</button>
+					</div>
+				</div>
+
+				{activeTab === 'purchases' ? (
+					<DataTable
+						columns={purchaseColumns}
+						data={filteredPurchases}
+						loading={loading}
+						searchQuery={searchQuery}
+						onSearchChange={setSearchQuery}
+						searchPlaceholder="Search purchases by GRN or supplier..."
+						emptyTitle="No purchases recorded"
+						emptyDescription="Click '+ Receive Stock (GRN)' to log incoming inventory shipments."
+						emptyActionText="+ Receive Stock"
+						onEmptyAction={() => setNewPurchaseOpen(true)}
+					/>
+				) : (
+					<DataTable
+						columns={supplierColumns}
+						data={suppliers}
+						loading={loading}
+						emptyTitle="No suppliers registered"
+						emptyDescription="Click '+ New Supplier' to add vendors to your directory."
+						emptyActionText="+ New Supplier"
+						onEmptyAction={() => setSupplierModalOpen(true)}
+					/>
+				)}
+
+				{/* New Purchase Modal */}
 				<Modal
-					title="Receive Goods / Purchase Order"
 					open={newPurchaseOpen}
 					onClose={() => setNewPurchaseOpen(false)}
+					title="Receive Stock / Goods Received Note (GRN)"
+					maxWidth="620px"
 				>
-					<form className="stack" onSubmit={submitPurchase}>
-						<div>
-							<label className="label">Select Supplier</label>
+					<form onSubmit={handleSubmitPurchase} className="stack" style={{ gap: '14px' }}>
+						<div className="field">
+							<label className="field__label">Supplier Vendor *</label>
 							<select
-								className="input"
+								className="select"
+								required
 								value={selectedSupplierId}
 								onChange={(e) => setSelectedSupplierId(e.target.value)}
 							>
-								<option value="">General Supplier</option>
+								<option value="">Select a supplier...</option>
 								{suppliers.map((s) => (
 									<option key={s.id} value={s.id}>
-										{s.name} ({s.contactName || s.phone})
+										{s.name} {s.contactName ? `(${s.contactName})` : ''}
 									</option>
 								))}
 							</select>
 						</div>
 
-						<h4 className="h4" style={{ marginTop: '0.5rem', marginBottom: '0.25rem' }}>Items to Receive</h4>
-						<div className="stack" style={{ maxHeight: '240px', overflowY: 'auto' }}>
-							{purchaseLines.map((line, idx) => (
-								<div key={idx} className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
-									<select
-										className="input"
-										style={{ flex: 2 }}
-										value={line.productId}
-										onChange={(e) => handleLineChange(idx, 'productId', e.target.value)}
-										required
-									>
-										<option value="">Select Product...</option>
-										{products.map((p) => (
-											<option key={p.id} value={p.id}>
-												{p.name} (Stock: {p.stock})
-											</option>
-										))}
-									</select>
-									<Input
-										placeholder="Qty"
-										type="number"
-										min="1"
-										style={{ width: '80px' }}
-										value={line.quantity}
-										onChange={(e) => handleLineChange(idx, 'quantity', e.target.value)}
-										required
-									/>
-									<Input
-										placeholder="Unit Cost"
-										type="number"
-										step="0.01"
-										min="0"
-										style={{ width: '100px' }}
-										value={line.costPrice}
-										onChange={(e) => handleLineChange(idx, 'costPrice', e.target.value)}
-										required
-									/>
-									<span style={{ minWidth: '70px', fontWeight: 'bold' }}>
-										{formatCurrency(Number(line.quantity || 0) * Number(line.costPrice || 0))}
-									</span>
-									{purchaseLines.length > 1 ? (
-										<Button
-											type="button"
-											variant="secondary"
-											onClick={() => handleRemoveLine(idx)}
+						<div>
+							<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+								<label className="field__label" style={{ margin: 0 }}>Line Items to Receive *</label>
+								<button
+									type="button"
+									onClick={handleAddLine}
+									style={{
+										background: 'none',
+										border: 'none',
+										color: 'var(--primary)',
+										fontWeight: 600,
+										fontSize: '0.8rem',
+										cursor: 'pointer',
+									}}
+								>
+									+ Add Line Item
+								</button>
+							</div>
+
+							<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
+								{purchaseLines.map((line, idx) => (
+									<div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+										<select
+											className="select"
+											style={{ flex: 2 }}
+											required
+											value={line.productId}
+											onChange={(e) => handleLineChange(idx, 'productId', e.target.value)}
 										>
-											✕
-										</Button>
-									) : null}
-								</div>
-							))}
+											<option value="">Select product...</option>
+											{products.map((p) => (
+												<option key={p.id} value={p.id}>
+													{p.name} (Cur. Stock: {p.stock || 0})
+												</option>
+											))}
+										</select>
+										<input
+											type="number"
+											className="input"
+											style={{ width: '70px' }}
+											min="1"
+											placeholder="Qty"
+											required
+											value={line.quantity}
+											onChange={(e) => handleLineChange(idx, 'quantity', e.target.value)}
+										/>
+										<input
+											type="number"
+											className="input"
+											style={{ width: '100px' }}
+											step="any"
+											placeholder="Cost (Rs.)"
+											required
+											value={line.costPrice}
+											onChange={(e) => handleLineChange(idx, 'costPrice', e.target.value)}
+										/>
+										{purchaseLines.length > 1 && (
+											<button
+												type="button"
+												onClick={() => handleRemoveLine(idx)}
+												style={{
+													background: 'none',
+													border: 'none',
+													color: 'var(--danger)',
+													cursor: 'pointer',
+													fontSize: '1rem',
+													padding: '4px',
+												}}
+												title="Remove line"
+											>
+												✕
+											</button>
+										)}
+									</div>
+								))}
+							</div>
 						</div>
 
-						<Button type="button" variant="secondary" onClick={handleAddLine}>
-							+ Add Another Item
-						</Button>
-
-						<div className="row row--space" style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '4px' }}>
-							<span className="bold">Total Purchase Value:</span>
-							<span className="bold" style={{ fontSize: '1.2rem', color: '#0f766e' }}>
+						<div
+							style={{
+								display: 'flex',
+								justifyContent: 'space-between',
+								alignItems: 'center',
+								padding: '12px',
+								background: '#f8fafc',
+								borderRadius: '8px',
+								border: '1px solid var(--border)',
+							}}
+						>
+							<span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Estimated Total Cost:</span>
+							<span style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--primary)' }}>
 								{formatCurrency(purchaseGrandTotal)}
 							</span>
 						</div>
 
-						<Input
-							label="Notes / Delivery Reference"
-							value={purchaseNotes}
-							onChange={(e) => setPurchaseNotes(e.target.value)}
-							placeholder="Invoice #, Bill of Lading, etc."
-						/>
+						<div className="field">
+							<label className="field__label">GRN Reference / Notes</label>
+							<input
+								type="text"
+								className="input"
+								placeholder="e.g. Invoice #PO-9921, Delivery Batch 2"
+								value={purchaseNotes}
+								onChange={(e) => setPurchaseNotes(e.target.value)}
+							/>
+						</div>
 
-						<div className="row row--space" style={{ marginTop: '1rem' }}>
-							<Button type="button" variant="secondary" onClick={() => setNewPurchaseOpen(false)}>
+						<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+							<Button variant="secondary" onClick={() => setNewPurchaseOpen(false)} disabled={submitting}>
 								Cancel
 							</Button>
-							<Button type="submit">Complete Goods Receipt & Restock</Button>
+							<Button type="submit" variant="primary" loading={submitting}>
+								Confirm GRN & Restock Inventory
+							</Button>
 						</div>
 					</form>
 				</Modal>
 
-				{/* Add Supplier Modal */}
+				{/* New Supplier Modal */}
 				<Modal
-					title="Register New Supplier"
 					open={supplierModalOpen}
 					onClose={() => setSupplierModalOpen(false)}
+					title="Register New Supplier Vendor"
+					maxWidth="480px"
 				>
-					<form className="stack" onSubmit={submitSupplier}>
-						<Input
-							label="Supplier / Company Name"
-							value={supplierForm.name}
-							onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
-							required
-						/>
-						<Input
-							label="Contact Person"
-							value={supplierForm.contactName}
-							onChange={(e) => setSupplierForm({ ...supplierForm, contactName: e.target.value })}
-						/>
-						<Input
-							label="Phone Number"
-							value={supplierForm.phone}
-							onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
-						/>
-						<Input
-							label="Email Address"
-							type="email"
-							value={supplierForm.email}
-							onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })}
-						/>
-						<div>
-							<label className="label">Payment Terms</label>
-							<select
+					<form onSubmit={handleSubmitSupplier} className="stack" style={{ gap: '14px' }}>
+						<div className="field">
+							<label className="field__label">Supplier Legal Name *</label>
+							<input
+								type="text"
 								className="input"
-								value={supplierForm.paymentTerms}
-								onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })}
-							>
-								<option value="immediate">Immediate / Cash on Delivery</option>
-								<option value="net15">Net 15 Days</option>
-								<option value="net30">Net 30 Days</option>
-								<option value="net60">Net 60 Days</option>
-							</select>
+								required
+								placeholder="e.g. Ceylon Beverage Distributors Ltd"
+								value={supplierForm.name}
+								onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
+							/>
 						</div>
-						<div className="row row--space" style={{ marginTop: '1rem' }}>
-							<Button type="button" variant="secondary" onClick={() => setSupplierModalOpen(false)}>
+						<div className="field">
+							<label className="field__label">Contact Representative</label>
+							<input
+								type="text"
+								className="input"
+								placeholder="e.g. Ruwan Jayawardena"
+								value={supplierForm.contactName}
+								onChange={(e) => setSupplierForm({ ...supplierForm, contactName: e.target.value })}
+							/>
+						</div>
+						<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+							<div className="field">
+								<label className="field__label">Phone Number</label>
+								<input
+									type="text"
+									className="input"
+									placeholder="+94 77 123 4567"
+									value={supplierForm.phone}
+									onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
+								/>
+							</div>
+							<div className="field">
+								<label className="field__label">Email</label>
+								<input
+									type="email"
+									className="input"
+									placeholder="vendor@distributor.com"
+									value={supplierForm.email}
+									onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })}
+								/>
+							</div>
+						</div>
+						<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+							<Button variant="secondary" onClick={() => setSupplierModalOpen(false)}>
 								Cancel
 							</Button>
-							<Button type="submit">Save Supplier</Button>
+							<Button type="submit" variant="primary">
+								Save Supplier
+							</Button>
 						</div>
 					</form>
 				</Modal>

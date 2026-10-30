@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import StatCard from '../../components/common/StatCard.jsx'
+import DataTable from '../../components/common/DataTable.jsx'
+import StatusBadge from '../../components/common/StatusBadge.jsx'
 import Button from '../../components/common/Button.jsx'
 import Modal from '../../components/common/Modal.jsx'
-import Table from '../../components/common/Table.jsx'
 import Input from '../../components/common/Input.jsx'
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx'
 import PlanGate from '../../components/common/PlanGate.jsx'
 import expenseService from '../../services/expenseService'
 import { formatCurrency } from '../../utils/formatCurrency'
@@ -25,6 +29,9 @@ export default function Expenses() {
 	const [modalOpen, setModalOpen] = useState(false)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(null)
+	const [searchQuery, setSearchQuery] = useState('')
+	const [deleteTarget, setDeleteTarget] = useState(null)
+
 	const [form, setForm] = useState({
 		title: '',
 		category: 'Utilities',
@@ -33,35 +40,22 @@ export default function Expenses() {
 		notes: '',
 	})
 
-	useEffect(() => {
-		let active = true
-		expenseService
-			.getAll()
-			.then((data) => {
-				if (active) {
-					setExpenses(data)
-					setLoading(false)
-				}
-			})
-			.catch((e) => {
-				if (active) {
-					setError(e?.response?.data?.message || e?.message || 'Failed to load expenses')
-					setLoading(false)
-				}
-			})
-		return () => {
-			active = false
+	const loadExpenses = useCallback(async () => {
+		try {
+			setLoading(true)
+			setError(null)
+			const data = await expenseService.getAll()
+			setExpenses(data || [])
+		} catch (e) {
+			setError(e?.response?.data?.message || e?.message || 'Failed to load expenses')
+		} finally {
+			setLoading(false)
 		}
 	}, [])
 
-	async function reloadExpenses() {
-		try {
-			const data = await expenseService.getAll()
-			setExpenses(data)
-		} catch (e) {
-			setError(e?.response?.data?.message || e?.message || 'Failed to refresh')
-		}
-	}
+	useEffect(() => {
+		loadExpenses()
+	}, [loadExpenses])
 
 	async function handleSubmit(e) {
 		e.preventDefault()
@@ -87,41 +81,67 @@ export default function Expenses() {
 				paymentMethod: 'cash',
 				notes: '',
 			})
-			await reloadExpenses()
+			await loadExpenses()
 		} catch (err) {
 			setError(err?.response?.data?.message || err?.message || 'Failed to record expense')
 		}
 	}
 
-	const handleDelete = useCallback(async (id) => {
-		if (!window.confirm('Delete this expense entry?')) return
+	async function confirmDelete() {
+		if (!deleteTarget) return
 		try {
-			await expenseService.remove(id)
-			await reloadExpenses()
+			await expenseService.remove(deleteTarget.id)
+			setDeleteTarget(null)
+			await loadExpenses()
 		} catch (err) {
-			setError(err?.response?.data?.message || err?.message || 'Failed to delete')
+			setError(err?.response?.data?.message || err?.message || 'Failed to delete expense')
 		}
-	}, [])
+	}
 
 	const totalExpenseAmount = useMemo(() => {
 		return expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0)
 	}, [expenses])
 
+	const filteredExpenses = useMemo(() => {
+		if (!searchQuery.trim()) return expenses
+		const q = searchQuery.toLowerCase()
+		return expenses.filter(
+			(e) =>
+				e.title?.toLowerCase().includes(q) ||
+				e.category?.toLowerCase().includes(q) ||
+				e.notes?.toLowerCase().includes(q) ||
+				e.paymentMethod?.toLowerCase().includes(q),
+		)
+	}, [expenses, searchQuery])
+
 	const columns = useMemo(
 		() => [
-			{ header: 'Expense Title', key: 'title' },
 			{
-				header: 'Category',
+				label: 'Expense Title',
+				key: 'title',
+				render: (row) => (
+					<div>
+						<div style={{ fontWeight: 600, color: '#0f172a' }}>{row.title}</div>
+						{row.notes && (
+							<div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+								{row.notes}
+							</div>
+						)}
+					</div>
+				),
+			},
+			{
+				label: 'Category',
 				key: 'category',
 				render: (row) => (
 					<span
 						style={{
 							padding: '3px 8px',
-							borderRadius: '4px',
-							fontSize: '0.8rem',
+							borderRadius: '6px',
+							fontSize: '0.75rem',
+							fontWeight: 600,
 							backgroundColor: '#e0f2fe',
 							color: '#0369a1',
-							fontWeight: 'bold',
 						}}
 					>
 						{row.category}
@@ -129,82 +149,106 @@ export default function Expenses() {
 				),
 			},
 			{
-				header: 'Amount',
+				label: 'Amount',
 				key: 'amount',
-				render: (row) => <strong>{formatCurrency(row.amount)}</strong>,
-			},
-			{
-				header: 'Payment Method',
-				key: 'paymentMethod',
 				render: (row) => (
-					<span className="badge" style={{ textTransform: 'capitalize' }}>
-						{row.paymentMethod}
+					<span style={{ fontWeight: 700, color: '#b91c1c' }}>
+						{formatCurrency(row.amount)}
 					</span>
 				),
 			},
 			{
-				header: 'Date',
-				key: 'createdAt',
-				render: (row) => formatDate(row.createdAt),
+				label: 'Payment Method',
+				key: 'paymentMethod',
+				render: (row) => (
+					<StatusBadge
+						status={row.paymentMethod === 'cash' ? 'info' : 'default'}
+						label={row.paymentMethod?.replace('_', ' ')}
+					/>
+				),
 			},
-			{ header: 'Notes', key: 'notes' },
 			{
-				header: 'Actions',
+				label: 'Date',
+				key: 'createdAt',
+				render: (row) => (
+					<span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+						{formatDate(row.createdAt)}
+					</span>
+				),
+			},
+			{
+				label: 'Actions',
 				key: 'actions',
+				width: '100px',
 				render: (row) => (
 					<Button
 						variant="secondary"
+						size="sm"
 						style={{ color: '#dc2626' }}
-						onClick={() => handleDelete(row.id)}
+						onClick={() => setDeleteTarget(row)}
 					>
 						Delete
 					</Button>
 				),
 			},
 		],
-		[handleDelete],
+		[],
 	)
 
 	return (
 		<PlanGate feature="expenseManagement">
 			<div className="stack">
-				<div className="row row--space">
-					<div>
-						<h2 className="h2" style={{ margin: 0 }}>Business Expenses</h2>
-						<div className="muted">Track operational overhead, utility payments, and petty cash.</div>
-					</div>
-					<Button onClick={() => setModalOpen(true)}>+ Record Expense</Button>
-				</div>
+				<PageHeader
+					title="Business Expenses"
+					subtitle="Track operational overhead, utility payments, vendor bills, and petty cash."
+					actions={
+						<Button onClick={() => setModalOpen(true)}>+ Record Expense</Button>
+					}
+				/>
 
-				{error ? <div className="card error">{error}</div> : null}
-
-				{/* Summary Cards */}
-				<div className="grid grid--3">
-					<div className="card">
-						<div className="muted">Total Expenses Recorded</div>
-						<div className="bold" style={{ fontSize: '1.4rem', color: '#b91c1c' }}>
-							{formatCurrency(totalExpenseAmount)}
-						</div>
+				{error && (
+					<div className="card" style={{ backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }}>
+						{error}
 					</div>
-					<div className="card">
-						<div className="muted">Expense Entries</div>
-						<div className="bold" style={{ fontSize: '1.4rem' }}>
-							{expenses.length}
-						</div>
-					</div>
-					<div className="card">
-						<div className="muted">Active Categories</div>
-						<div className="bold" style={{ fontSize: '1.4rem', color: '#0369a1' }}>
-							{new Set(expenses.map((e) => e.category)).size}
-						</div>
-					</div>
-				</div>
-
-				{loading ? (
-					<div className="card muted">Loading expenses...</div>
-				) : (
-					<Table columns={columns} data={expenses} />
 				)}
+
+				{/* Summary KPI Cards */}
+				<div className="grid grid--3">
+					<StatCard
+						label="Total Expenses"
+						value={formatCurrency(totalExpenseAmount)}
+						subtext="All recorded overhead"
+						icon="💸"
+					/>
+					<StatCard
+						label="Total Entries"
+						value={expenses.length}
+						subtext="Recorded transactions"
+						icon="🧾"
+					/>
+					<StatCard
+						label="Active Categories"
+						value={new Set(expenses.map((e) => e.category)).size}
+						subtext="Expense categories"
+						icon="🏷️"
+					/>
+				</div>
+
+				{/* Expenses DataTable */}
+				<div className="card" style={{ padding: '1.25rem' }}>
+					<DataTable
+						columns={columns}
+						data={filteredExpenses}
+						loading={loading}
+						searchQuery={searchQuery}
+						onSearchChange={setSearchQuery}
+						searchPlaceholder="Search expense by title, category, or notes..."
+						emptyTitle="No expenses found"
+						emptyDescription="No business expenses have been recorded yet or match your search."
+						emptyActionText="+ Record Expense"
+						onEmptyAction={() => setModalOpen(true)}
+					/>
+				</div>
 
 				{/* Record Expense Modal */}
 				<Modal
@@ -270,6 +314,17 @@ export default function Expenses() {
 						</div>
 					</form>
 				</Modal>
+
+				{/* Confirm Delete Dialog */}
+				<ConfirmDialog
+					open={Boolean(deleteTarget)}
+					title="Delete Expense Entry"
+					message={`Are you sure you want to delete "${deleteTarget?.title}" (${formatCurrency(deleteTarget?.amount || 0)})? This action cannot be undone.`}
+					confirmLabel="Delete"
+					isDanger={true}
+					onConfirm={confirmDelete}
+					onCancel={() => setDeleteTarget(null)}
+				/>
 			</div>
 		</PlanGate>
 	)

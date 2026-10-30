@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/common/Button.jsx'
 import Modal from '../../components/common/Modal.jsx'
-import Table from '../../components/common/Table.jsx'
-import Input from '../../components/common/Input.jsx'
+import DataTable from '../../components/common/DataTable.jsx'
+import PageHeader from '../../components/common/PageHeader.jsx'
+import StatusBadge from '../../components/common/StatusBadge.jsx'
 import salesService from '../../services/salesService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatDate } from '../../utils/formatDate'
@@ -17,6 +18,7 @@ export default function Sales() {
 	const [statusFilter, setStatusFilter] = useState('all')
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(null)
+	const [refunding, setRefunding] = useState(false)
 
 	useEffect(() => {
 		let active = true
@@ -24,7 +26,7 @@ export default function Sales() {
 			.list()
 			.then((data) => {
 				if (active) {
-					setSales(data)
+					setSales(data || [])
 					setLoading(false)
 				}
 			})
@@ -41,15 +43,19 @@ export default function Sales() {
 
 	async function refreshSales() {
 		try {
+			setLoading(true)
 			const data = await salesService.list()
-			setSales(data)
+			setSales(data || [])
 		} catch (e) {
 			setError(e?.response?.data?.message || e?.message || 'Failed to refresh sales')
+		} finally {
+			setLoading(false)
 		}
 	}
 
 	async function handleRefund() {
 		if (!selectedSale) return
+		setRefunding(true)
 		try {
 			await salesService.refundSale(selectedSale.id, {
 				reason: refundReason || 'Customer return',
@@ -61,6 +67,8 @@ export default function Sales() {
 			await refreshSales()
 		} catch (e) {
 			setError(e?.response?.data?.message || e?.message || 'Refund failed')
+		} finally {
+			setRefunding(false)
 		}
 	}
 
@@ -74,16 +82,15 @@ export default function Sales() {
 			<head>
 				<title>Receipt #${sale.id}</title>
 				<style>
-					body { font-family: monospace; font-size: 13px; padding: 15px; margin: 0; line-height: 1.4; }
+					body { font-family: monospace; font-size: 13px; padding: 15px; margin: 0; line-height: 1.4; color: #000; }
 					.center { text-align: center; }
 					.divider { border-top: 1px dashed #000; margin: 10px 0; }
 					.row { display: flex; justify-content: space-between; }
 					.bold { font-weight: bold; }
-					.text-right { text-align: right; }
 				</style>
 			</head>
 			<body>
-				<div class="center bold" style="font-size: 16px;">UNIVERSAL POS PLATFORM</div>
+				<div class="center bold" style="font-size: 16px;">SAAS POS & ERP PLATFORM</div>
 				<div class="center">Official Sales Receipt</div>
 				<div class="divider"></div>
 				<div class="row"><span>Sale ID:</span><span>${sale.id}</span></div>
@@ -98,22 +105,19 @@ export default function Sales() {
 					<div class="row">
 						<span>${i.name} x${i.quantity}</span>
 						<span>${formatCurrency(i.totalAmount || i.price * i.quantity)}</span>
-					</div>
-				`,
+					</div>`
 					)
 					.join('')}
 				<div class="divider"></div>
-				<div class="row"><span>Subtotal:</span><span>${formatCurrency(sale.totals?.subtotal)}</span></div>
-				${sale.totals?.discountTotal > 0 ? `<div class="row"><span>Discount:</span><span>-${formatCurrency(sale.totals?.discountTotal)}</span></div>` : ''}
-				<div class="row"><span>Tax:</span><span>${formatCurrency(sale.totals?.taxTotal)}</span></div>
-				<div class="row bold" style="font-size: 15px;"><span>TOTAL:</span><span>${formatCurrency(sale.totals?.total)}</span></div>
+				<div class="row"><span>Subtotal:</span><span>${formatCurrency(sale.totals?.subtotal || 0)}</span></div>
+				<div class="row"><span>Tax:</span><span>${formatCurrency(sale.totals?.taxTotal || 0)}</span></div>
+				<div class="row bold" style="font-size: 15px;"><span>TOTAL:</span><span>${formatCurrency(sale.totals?.total || 0)}</span></div>
+				<div class="row"><span>Paid (${sale.payment?.method || 'cash'}):</span><span>${formatCurrency(sale.payment?.paid || 0)}</span></div>
+				<div class="row"><span>Change:</span><span>${formatCurrency(sale.payment?.change || 0)}</span></div>
 				<div class="divider"></div>
-				<div class="row"><span>Payment (${sale.payment?.method || 'cash'}):</span><span>${formatCurrency(sale.payment?.paid)}</span></div>
-				${sale.payment?.change > 0 ? `<div class="row"><span>Change:</span><span>${formatCurrency(sale.payment?.change)}</span></div>` : ''}
-				<div class="divider"></div>
-				<div class="center">Thank you for your business!</div>
+				<div class="center" style="font-size: 11px; margin-top: 10px;">Thank you for your business!</div>
 				<script>
-					window.onload = function() { window.print(); }
+					window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };
 				</script>
 			</body>
 			</html>
@@ -124,271 +128,269 @@ export default function Sales() {
 
 	const filteredSales = useMemo(() => {
 		return sales.filter((s) => {
-			const matchesQuery =
-				!searchQuery ||
-				String(s.id).toLowerCase().includes(searchQuery.toLowerCase()) ||
-				String(s.customerName || '').toLowerCase().includes(searchQuery.toLowerCase())
 			const matchesStatus = statusFilter === 'all' || s.status === statusFilter
-			return matchesQuery && matchesStatus
+			const matchesSearch =
+				!searchQuery ||
+				s.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				(s.customerName && s.customerName.toLowerCase().includes(searchQuery.toLowerCase()))
+			return matchesStatus && matchesSearch
 		})
-	}, [sales, searchQuery, statusFilter])
+	}, [sales, statusFilter, searchQuery])
 
-	const columns = useMemo(
-		() => [
-			{ header: 'Sale ID', key: 'id' },
-			{
-				header: 'Date',
-				key: 'createdAt',
-				render: (row) => formatDate(row.createdAt),
-			},
-			{ header: 'Customer', key: 'customerName' },
-			{
-				header: 'Items',
-				key: 'itemsCount',
-				render: (row) => row.totals?.itemsCount || row.items?.length || 0,
-			},
-			{
-				header: 'Total',
-				key: 'total',
-				render: (row) => <strong>{formatCurrency(row.totals?.total || 0)}</strong>,
-			},
-			{
-				header: 'Payment',
-				key: 'paymentMethod',
-				render: (row) => (
-					<span className="badge" style={{ textTransform: 'capitalize' }}>
-						{row.payment?.method || 'cash'}
-					</span>
-				),
-			},
-			{
-				header: 'Status',
-				key: 'status',
-				render: (row) => {
-					const isRefunded = row.status === 'refunded'
-					return (
-						<span
-							style={{
-								padding: '3px 8px',
-								borderRadius: '4px',
-								fontSize: '0.8rem',
-								fontWeight: 'bold',
-								backgroundColor: isRefunded ? '#fee2e2' : '#dcfce7',
-								color: isRefunded ? '#991b1b' : '#166534',
-							}}
-						>
-							{String(row.status || 'completed').toUpperCase()}
-						</span>
-					)
-				},
-			},
-			{
-				header: 'Actions',
-				key: 'actions',
-				render: (row) => (
-					<div className="row" style={{ gap: '0.5rem' }}>
-						<Button
-							variant="secondary"
-							onClick={() => setSelectedSale(row)}
-						>
-							View
-						</Button>
-						<Button
-							variant="secondary"
-							onClick={() => handlePrintReceipt(row)}
-						>
-							Receipt
-						</Button>
-					</div>
-				),
-			},
-		],
-		[],
-	)
+	const columns = [
+		{
+			key: 'id',
+			label: 'Sale Identifier',
+			render: (row) => (
+				<div>
+					<div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.id.slice(0, 10)}...</div>
+					<div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{formatDate(row.createdAt)}</div>
+				</div>
+			),
+		},
+		{
+			key: 'customer',
+			label: 'Customer',
+			render: (row) => <span>{row.customerName || 'Walk-in Customer'}</span>,
+		},
+		{
+			key: 'itemsCount',
+			label: 'Items',
+			render: (row) => (
+				<span>
+					{row.items?.length || row.totals?.itemsCount || 1} item{row.items?.length === 1 ? '' : 's'}
+				</span>
+			),
+		},
+		{
+			key: 'total',
+			label: 'Total Amount',
+			render: (row) => <strong style={{ color: 'var(--text)' }}>{formatCurrency(row.totals?.total || 0)}</strong>,
+		},
+		{
+			key: 'paymentMethod',
+			label: 'Payment Method',
+			render: (row) => (
+				<span style={{ textTransform: 'capitalize', fontSize: '0.85rem' }}>
+					{row.payment?.method || 'Cash'}
+				</span>
+			),
+		},
+		{
+			key: 'status',
+			label: 'Status',
+			render: (row) => <StatusBadge status={row.status || 'completed'} />,
+		},
+		{
+			key: 'actions',
+			label: 'Actions',
+			render: (row) => (
+				<div style={{ display: 'flex', gap: '6px' }}>
+					<Button variant="secondary" size="sm" onClick={() => setSelectedSale(row)}>
+						Inspect
+					</Button>
+					<Button variant="secondary" size="sm" onClick={() => handlePrintReceipt(row)}>
+						Receipt
+					</Button>
+				</div>
+			),
+		},
+	]
 
 	return (
-		<div className="stack">
-			<div className="row row--space">
-				<div>
-					<h2 className="h2" style={{ margin: 0 }}>Sales History</h2>
-					<div className="muted">View customer orders, receipts, and process refunds.</div>
+		<div>
+			<PageHeader
+				title="Sales Ledger & Receipts"
+				subtitle="Search sales history, view printable receipts, and issue inventory-restocked refunds."
+				actions={
+					<Button variant="secondary" onClick={refreshSales}>
+						↻ Refresh Ledger
+					</Button>
+				}
+			/>
+
+			{error && (
+				<div
+					style={{
+						padding: '12px 16px',
+						background: 'var(--danger-light)',
+						border: '1px solid #fecaca',
+						color: 'var(--danger)',
+						borderRadius: '8px',
+						marginBottom: '16px',
+						fontSize: '0.875rem',
+					}}
+				>
+					{error}
 				</div>
-				<Button variant="secondary" onClick={refreshSales}>
-					Refresh
-				</Button>
-			</div>
-
-			{error ? <div className="card error">{error}</div> : null}
-
-			<div className="card">
-				<div className="row row--space" style={{ gap: '1rem', flexWrap: 'wrap' }}>
-					<Input
-						placeholder="Search by Sale ID or Customer..."
-						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
-						style={{ minWidth: '280px' }}
-					/>
-					<div className="row" style={{ gap: '0.5rem' }}>
-						<span className="muted" style={{ alignSelf: 'center' }}>Filter:</span>
-						<select
-							className="input"
-							value={statusFilter}
-							onChange={(e) => setStatusFilter(e.target.value)}
-						>
-							<option value="all">All Statuses</option>
-							<option value="completed">Completed</option>
-							<option value="refunded">Refunded</option>
-						</select>
-					</div>
-				</div>
-			</div>
-
-			{loading ? (
-				<div className="card muted">Loading sales history...</div>
-			) : (
-				<Table columns={columns} data={filteredSales} />
 			)}
 
-			{/* Detailed Sale Modal */}
-			<Modal
-				title={`Sale #${selectedSale?.id || ''}`}
-				open={Boolean(selectedSale && !refundModalOpen)}
-				onClose={() => setSelectedSale(null)}
-			>
-				{selectedSale ? (
-					<div className="stack">
-						<div className="row row--space">
-							<div>
-								<div className="muted">Customer: {selectedSale.customerName}</div>
-								<div className="muted">Date: {formatDate(selectedSale.createdAt)}</div>
-							</div>
-							<div>
-								<span
-									style={{
-										padding: '4px 10px',
-										borderRadius: '4px',
-										fontSize: '0.85rem',
-										fontWeight: 'bold',
-										backgroundColor: selectedSale.status === 'refunded' ? '#fee2e2' : '#dcfce7',
-										color: selectedSale.status === 'refunded' ? '#991b1b' : '#166534',
-									}}
-								>
-									{String(selectedSale.status).toUpperCase()}
-								</span>
-							</div>
-						</div>
+			{/* Filter Tabs */}
+			<div className="card" style={{ padding: '12px 16px', marginBottom: '16px' }}>
+				<div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+					<span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)' }}>Status:</span>
+					{['all', 'completed', 'refunded'].map((st) => (
+						<button
+							key={st}
+							type="button"
+							className={`btn btn--sm ${statusFilter === st ? 'btn--primary' : 'btn--secondary'}`}
+							onClick={() => setStatusFilter(st)}
+							style={{ textTransform: 'capitalize', borderRadius: '9999px' }}
+						>
+							{st}
+						</button>
+					))}
+				</div>
+			</div>
 
-						<h4 className="h4" style={{ marginTop: '0.5rem', marginBottom: '0.25rem' }}>Line Items</h4>
-						<table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-							<thead>
-								<tr style={{ borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
-									<th>Product</th>
-									<th>Price</th>
-									<th>Qty</th>
-									<th style={{ textAlign: 'right' }}>Total</th>
-								</tr>
-							</thead>
-							<tbody>
-								{(selectedSale.items || []).map((item, idx) => (
-									<tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-										<td>{item.name}</td>
-										<td>{formatCurrency(item.price)}</td>
-										<td>{item.quantity}</td>
-										<td style={{ textAlign: 'right' }}>
-											{formatCurrency(item.totalAmount || item.price * item.quantity)}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+			<DataTable
+				columns={columns}
+				data={filteredSales}
+				loading={loading}
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
+				searchPlaceholder="Search by Sale ID or customer..."
+				emptyTitle="No sales found"
+				emptyDescription="No sales match your current search or status filter."
+			/>
 
-						<div className="stack" style={{ background: '#f8fafc', padding: '1rem', borderRadius: '6px' }}>
-							<div className="row row--space">
-								<span className="muted">Subtotal:</span>
-								<span>{formatCurrency(selectedSale.totals?.subtotal)}</span>
-							</div>
-							{selectedSale.totals?.discountTotal > 0 ? (
-								<div className="row row--space">
-									<span className="muted">Discount:</span>
-									<span>-{formatCurrency(selectedSale.totals?.discountTotal)}</span>
-								</div>
-							) : null}
-							<div className="row row--space">
-								<span className="muted">Tax:</span>
-								<span>{formatCurrency(selectedSale.totals?.taxTotal)}</span>
-							</div>
-							<div className="row row--space" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-								<span>Grand Total:</span>
-								<span>{formatCurrency(selectedSale.totals?.total)}</span>
-							</div>
-							<div className="row row--space" style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
-								<span className="muted">Paid via {selectedSale.payment?.method}:</span>
-								<span>{formatCurrency(selectedSale.payment?.paid)}</span>
-							</div>
-							{selectedSale.payment?.change > 0 ? (
-								<div className="row row--space">
-									<span className="muted">Change:</span>
-									<span>{formatCurrency(selectedSale.payment?.change)}</span>
-								</div>
-							) : null}
-						</div>
-
-						<div className="row row--space" style={{ marginTop: '1rem' }}>
+			{/* Inspect Sale Modal */}
+			{selectedSale && !refundModalOpen && (
+				<Modal
+					open={true}
+					onClose={() => setSelectedSale(null)}
+					title={`Sale Details #${selectedSale.id.slice(0, 8)}`}
+					maxWidth="560px"
+					footer={
+						<div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
 							<Button variant="secondary" onClick={() => handlePrintReceipt(selectedSale)}>
-								Print Receipt
+								🖨️ Print Receipt
 							</Button>
 							{selectedSale.status !== 'refunded' ? (
 								<Button
 									variant="danger"
-									style={{ backgroundColor: '#dc2626', color: '#fff' }}
 									onClick={() => setRefundModalOpen(true)}
 								>
-									Refund Sale
+									Issue Refund
 								</Button>
-							) : null}
+							) : (
+								<span className="badge badge--danger">Already Refunded</span>
+							)}
+						</div>
+					}
+				>
+					<div className="stack" style={{ gap: '14px' }}>
+						<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
+							<div>Customer: <strong>{selectedSale.customerName || 'Walk-in'}</strong></div>
+							<div>Date: <strong>{formatDate(selectedSale.createdAt)}</strong></div>
+							<div>Payment Method: <strong style={{ textTransform: 'capitalize' }}>{selectedSale.payment?.method || 'Cash'}</strong></div>
+							<div>Status: <StatusBadge status={selectedSale.status} /></div>
+						</div>
+
+						<div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+							<div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '8px' }}>Line Items:</div>
+							{(selectedSale.items || []).map((item, idx) => (
+								<div
+									key={idx}
+									style={{
+										display: 'flex',
+										justifyContent: 'space-between',
+										fontSize: '0.85rem',
+										padding: '4px 0',
+										borderBottom: '1px solid #f1f5f9',
+									}}
+								>
+									<span>
+										<strong>{item.quantity}x</strong> {item.name}
+									</span>
+									<span>{formatCurrency(item.totalAmount || item.price * item.quantity)}</span>
+								</div>
+							))}
+						</div>
+
+						<div
+							style={{
+								background: '#f8fafc',
+								padding: '12px',
+								borderRadius: '6px',
+								fontSize: '0.875rem',
+							}}
+						>
+							<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+								<span className="muted">Subtotal</span>
+								<span>{formatCurrency(selectedSale.totals?.subtotal || 0)}</span>
+							</div>
+							<div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+								<span className="muted">Tax</span>
+								<span>{formatCurrency(selectedSale.totals?.taxTotal || 0)}</span>
+							</div>
+							<div
+								style={{
+									display: 'flex',
+									justifyContent: 'space-between',
+									fontWeight: 700,
+									fontSize: '1rem',
+									borderTop: '1px solid var(--border)',
+									paddingTop: '6px',
+									marginTop: '4px',
+								}}
+							>
+								<span>Total Paid</span>
+								<span style={{ color: 'var(--primary)' }}>
+									{formatCurrency(selectedSale.totals?.total || 0)}
+								</span>
+							</div>
 						</div>
 					</div>
-				) : null}
-			</Modal>
+				</Modal>
+			)}
 
-			{/* Refund Confirmation Modal */}
-			<Modal
-				title="Confirm Sale Refund"
-				open={refundModalOpen}
-				onClose={() => setRefundModalOpen(false)}
-			>
-				<div className="stack">
-					<div className="muted">
-						Are you sure you want to refund Sale #{selectedSale?.id}? Total amount:{' '}
-						<strong>{formatCurrency(selectedSale?.totals?.total || 0)}</strong>
+			{/* Refund Modal */}
+			{refundModalOpen && selectedSale && (
+				<Modal
+					open={true}
+					onClose={() => setRefundModalOpen(false)}
+					title="Process Refund & Restock"
+					maxWidth="460px"
+					footer={
+						<>
+							<Button variant="secondary" onClick={() => setRefundModalOpen(false)} disabled={refunding}>
+								Cancel
+							</Button>
+							<Button variant="danger" onClick={handleRefund} loading={refunding}>
+								Confirm Refund ({formatCurrency(selectedSale.totals?.total || 0)})
+							</Button>
+						</>
+					}
+				>
+					<div className="stack" style={{ gap: '14px' }}>
+						<p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted)' }}>
+							Refunding Sale <strong>#{selectedSale.id.slice(0, 8)}</strong> will mark the transaction as refunded and can restock the items into inventory.
+						</p>
+
+						<div className="field">
+							<label className="field__label">Reason for Return *</label>
+							<input
+								type="text"
+								className="input"
+								placeholder="e.g. Defective item, customer changed mind"
+								value={refundReason}
+								onChange={(e) => setRefundReason(e.target.value)}
+								required
+							/>
+						</div>
+
+						<label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', cursor: 'pointer' }}>
+							<input
+								type="checkbox"
+								checked={restock}
+								onChange={(e) => setRestock(e.target.checked)}
+							/>
+							<span>Automatically restock items into product inventory balances</span>
+						</label>
 					</div>
-					<Input
-						label="Refund Reason"
-						placeholder="e.g. Defective item, customer return"
-						value={refundReason}
-						onChange={(e) => setRefundReason(e.target.value)}
-					/>
-					<label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-						<input
-							type="checkbox"
-							checked={restock}
-							onChange={(e) => setRestock(e.target.checked)}
-						/>
-						<span>Restock items back into inventory</span>
-					</label>
-					<div className="row row--space" style={{ marginTop: '1rem' }}>
-						<Button variant="secondary" onClick={() => setRefundModalOpen(false)}>
-							Cancel
-						</Button>
-						<Button
-							style={{ backgroundColor: '#dc2626', color: '#fff' }}
-							onClick={handleRefund}
-						>
-							Confirm Refund
-						</Button>
-					</div>
-				</div>
-			</Modal>
+				</Modal>
+			)}
 		</div>
 	)
 }
