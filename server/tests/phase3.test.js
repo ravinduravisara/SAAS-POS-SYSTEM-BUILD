@@ -177,4 +177,28 @@ describe('PHASE 3: SaaS Control Center & Feature Activation Engine Tests', () =>
 			assert.strictEqual(accessRes.status, 200)
 		})
 	})
+
+	describe('5. Commercial Tenant Lifecycle & Cascade Deletion', () => {
+		it('Super Admin can permanently delete tenant workspace with cascade cleanup', async () => {
+			const res = await request(app)
+				.delete(`/api/super-admin/tenants/${createdTenantId}`)
+				.set('Authorization', `Bearer ${superAdminToken}`)
+			assert.strictEqual(res.status, 200)
+			assert.strictEqual(res.body.ok, true)
+		})
+
+		it('fetching deleted tenant returns 404 Not Found', async () => {
+			const res = await request(app)
+				.get(`/api/super-admin/tenants/${createdTenantId}`)
+				.set('Authorization', `Bearer ${superAdminToken}`)
+			assert.strictEqual(res.status, 404)
+		})
+
+		it('rejects deletion of non-existent tenant with 404', async () => {
+			const res = await request(app)
+				.delete('/api/super-admin/tenants/tenant_nonexistent_999')
+				.set('Authorization', `Bearer ${superAdminToken}`)
+			assert.strictEqual(res.status, 404)
+		})
+	})
 })

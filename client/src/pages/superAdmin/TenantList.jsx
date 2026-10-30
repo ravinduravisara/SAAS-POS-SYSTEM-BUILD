@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Button from '../../components/common/Button.jsx'
 import Modal from '../../components/common/Modal.jsx'
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx'
 import DataTable from '../../components/common/DataTable.jsx'
 import PageHeader from '../../components/common/PageHeader.jsx'
 import StatusBadge from '../../components/common/StatusBadge.jsx'
@@ -17,6 +18,8 @@ export default function TenantList() {
 	const [submitting, setSubmitting] = useState(false)
 	const [error, setError] = useState(null)
 	const [currentStep, setCurrentStep] = useState(1)
+	const [deleteTarget, setDeleteTarget] = useState(null)
+	const [deleteLoading, setDeleteLoading] = useState(false)
 
 	const [form, setForm] = useState({
 		name: '',
@@ -110,6 +113,21 @@ export default function TenantList() {
 		}
 	}
 
+	async function handleDeleteTenant() {
+		if (!deleteTarget) return
+		setDeleteLoading(true)
+		setError(null)
+		try {
+			await superAdminService.deleteTenant(deleteTarget.id)
+			setDeleteTarget(null)
+			await reloadTenants()
+		} catch (err) {
+			setError(err?.response?.data?.message || err?.message || 'Failed to delete tenant workspace')
+		} finally {
+			setDeleteLoading(false)
+		}
+	}
+
 	const filteredTenants = useMemo(() => {
 		return tenants.filter((t) => {
 			const matchesStatus = statusFilter === 'all' || t.status === statusFilter
@@ -145,7 +163,7 @@ export default function TenantList() {
 			label: 'Industry / Preset',
 			render: (t) => (
 				<span style={{ textTransform: 'capitalize', fontSize: '0.85rem' }}>
-					{t.business_type || 'Retail'}
+					{t.businessType || t.business_type || 'Retail'}
 				</span>
 			),
 		},
@@ -178,7 +196,7 @@ export default function TenantList() {
 			label: 'Limits (Users/Branches/Products)',
 			render: (t) => (
 				<span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-					{t.max_users || 2} users · {t.max_branches || 1} br · {t.max_products || 100} prods
+					{t.maxUsers ?? t.max_users ?? 2} users · {t.maxBranches ?? t.max_branches ?? 1} br · {t.maxProducts ?? t.max_products ?? 100} prods
 				</span>
 			),
 		},
@@ -187,7 +205,7 @@ export default function TenantList() {
 			label: 'Created',
 			render: (t) => (
 				<span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-					{formatDate(t.created_at)}
+					{formatDate(t.createdAt || t.created_at)}
 				</span>
 			),
 		},
@@ -195,9 +213,19 @@ export default function TenantList() {
 			key: 'actions',
 			label: 'Actions',
 			render: (t) => (
-				<Link to={`/super-admin/tenants/${t.id}`} className="btn btn--secondary btn--sm">
-					Manage →
-				</Link>
+				<div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+					<Link to={`/super-admin/tenants/${t.id}`} className="btn btn--secondary btn--sm">
+						Manage →
+					</Link>
+					<Button
+						variant="secondary"
+						size="sm"
+						style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+						onClick={() => setDeleteTarget(t)}
+					>
+						Delete
+					</Button>
+				</div>
 			),
 		},
 	]
@@ -555,6 +583,19 @@ export default function TenantList() {
 					)}
 				</form>
 			</Modal>
+
+			{/* Confirm Tenant Deletion Dialog */}
+			<ConfirmDialog
+				open={Boolean(deleteTarget)}
+				title="Delete Commercial Tenant"
+				message={`Are you sure you want to permanently delete workspace "${deleteTarget?.name}" (${deleteTarget?.email})? All associated accounts, sales, inventory, and settings will be permanently removed.`}
+				confirmText="Delete Workspace"
+				cancelText="Cancel"
+				variant="danger"
+				loading={deleteLoading}
+				onConfirm={handleDeleteTenant}
+				onCancel={() => setDeleteTarget(null)}
+			/>
 		</div>
 	)
 }

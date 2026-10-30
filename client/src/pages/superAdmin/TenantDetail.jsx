@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../components/common/PageHeader.jsx'
 import DataTable from '../../components/common/DataTable.jsx'
 import StatusBadge from '../../components/common/StatusBadge.jsx'
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx'
 import Button from '../../components/common/Button.jsx'
 import Input from '../../components/common/Input.jsx'
 import superAdminService from '../../services/superAdminService'
@@ -10,6 +11,7 @@ import { formatDate } from '../../utils/formatDate'
 
 export default function TenantDetail() {
 	const { id } = useParams()
+	const navigate = useNavigate()
 	const [tenant, setTenant] = useState(null)
 	const [catalog, setCatalog] = useState({ categories: {}, features: [], presets: {} })
 	const [featureValues, setFeatureValues] = useState({})
@@ -17,6 +19,8 @@ export default function TenantDetail() {
 	const [plan, setPlan] = useState('pro')
 	const [limits, setLimits] = useState({ maxUsers: 5, maxProducts: 500, maxBranches: 1 })
 	const [saving, setSaving] = useState(false)
+	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+	const [deleting, setDeleting] = useState(false)
 	const [message, setMessage] = useState(null)
 	const [error, setError] = useState(null)
 
@@ -80,6 +84,19 @@ export default function TenantDetail() {
 			setError(err?.response?.data?.message || err?.message || 'Update failed')
 		} finally {
 			setSaving(false)
+		}
+	}
+
+	async function handleDeleteTenant() {
+		setDeleting(true)
+		setError(null)
+		try {
+			await superAdminService.deleteTenant(id)
+			navigate('/super-admin/tenants')
+		} catch (err) {
+			setError(err?.response?.data?.message || err?.message || 'Failed to delete workspace')
+			setDeleting(false)
+			setDeleteDialogOpen(false)
 		}
 	}
 
@@ -231,6 +248,14 @@ export default function TenantDetail() {
 						>
 							{tenant.plan || 'starter'}
 						</span>
+						<Button
+							variant="secondary"
+							size="sm"
+							style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+							onClick={() => setDeleteDialogOpen(true)}
+						>
+							Delete Tenant
+						</Button>
 					</div>
 				}
 			/>
@@ -429,6 +454,18 @@ export default function TenantDetail() {
 					emptyDescription="No users have been registered under this tenant."
 				/>
 			</div>
+
+			<ConfirmDialog
+				open={deleteDialogOpen}
+				title="Delete Commercial Tenant"
+				message={`Are you sure you want to permanently delete workspace "${tenant.name}" (${tenant.email})? All associated accounts, sales, inventory, and settings will be permanently removed.`}
+				confirmText="Delete Workspace"
+				cancelText="Cancel"
+				variant="danger"
+				loading={deleting}
+				onConfirm={handleDeleteTenant}
+				onCancel={() => setDeleteDialogOpen(false)}
+			/>
 		</div>
 	)
 }

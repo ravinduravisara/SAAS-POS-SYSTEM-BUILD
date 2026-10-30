@@ -23,23 +23,42 @@ const VALID_STATUSES = new Set(['active', 'trial', 'past_due', 'suspended', 'can
 
 function mapTenant(tenant) {
 	if (!tenant) return tenant
+	const meta = tenant.feature_overrides?._meta || {}
+	const businessType = tenant.business_type || meta.businessType || 'retail'
+	const registrationNumber = tenant.registration_number || meta.registrationNumber || ''
+	const phone = tenant.phone || meta.phone || ''
+	const address = tenant.address || meta.address || ''
+	const maxUsers = tenant.max_users !== undefined ? tenant.max_users : (meta.maxUsers ?? PLAN_FEATURES[tenant.plan]?.maxUsers ?? 2)
+	const maxProducts = tenant.max_products !== undefined ? tenant.max_products : (meta.maxProducts ?? PLAN_FEATURES[tenant.plan]?.maxProducts ?? 100)
+	const maxBranches = tenant.max_branches !== undefined ? tenant.max_branches : (meta.maxBranches ?? 1)
+	const trialEndsAt = tenant.trial_ends_at
+	const createdAt = tenant.created_at
+
 	return {
 		id: tenant.id,
 		name: tenant.name,
 		slug: tenant.slug,
 		email: tenant.email,
-		businessType: tenant.business_type || 'retail',
-		registrationNumber: tenant.registration_number || '',
-		phone: tenant.phone || '',
-		address: tenant.address || '',
 		plan: tenant.plan || 'starter',
 		status: tenant.status || 'trial',
 		featureOverrides: tenant.feature_overrides || {},
-		maxUsers: tenant.max_users !== undefined ? tenant.max_users : (PLAN_FEATURES[tenant.plan]?.maxUsers ?? 2),
-		maxProducts: tenant.max_products !== undefined ? tenant.max_products : (PLAN_FEATURES[tenant.plan]?.maxProducts ?? 100),
-		maxBranches: tenant.max_branches !== undefined ? tenant.max_branches : 1,
-		trialEndsAt: tenant.trial_ends_at,
-		createdAt: tenant.created_at,
+		feature_overrides: tenant.feature_overrides || {},
+		businessType,
+		business_type: businessType,
+		registrationNumber,
+		registration_number: registrationNumber,
+		phone,
+		address,
+		maxUsers,
+		max_users: maxUsers,
+		maxProducts,
+		max_products: maxProducts,
+		maxBranches,
+		max_branches: maxBranches,
+		trialEndsAt,
+		trial_ends_at: trialEndsAt,
+		createdAt,
+		created_at: createdAt,
 	}
 }
 
@@ -203,23 +222,33 @@ async function createTenant(req, res, next) {
 
 		const slug = payload.slug || `${String(payload.name || 'store').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString().slice(-4)}`
 
+		// Package business metadata safely into JSONB feature_overrides._meta
+		// so it persists across all PostgreSQL schemas without schema cache column mismatch
+		const meta = {
+			businessType: payload.businessType || payload.industryPreset || 'retail',
+			registrationNumber: payload.registrationNumber || '',
+			phone: payload.phone || '',
+			address: payload.address || '',
+			maxUsers: payload.maxUsers !== undefined ? parseInt(payload.maxUsers, 10) : (PLAN_FEATURES[plan]?.maxUsers ?? 2),
+			maxProducts: payload.maxProducts !== undefined ? parseInt(payload.maxProducts, 10) : (PLAN_FEATURES[plan]?.maxProducts ?? 100),
+			maxBranches: payload.maxBranches !== undefined ? parseInt(payload.maxBranches, 10) : 1,
+		}
+
+		const tenantFeatureOverrides = {
+			...featureOverrides,
+			_meta: meta,
+		}
+
 		const { data: tenant, error } = await db
 			.from('tenants')
 			.insert({
 				name: payload.name || 'New Business',
 				slug,
 				email: tenantEmail,
-				business_type: payload.businessType || payload.industryPreset || 'retail',
-				registration_number: payload.registrationNumber || '',
-				phone: payload.phone || '',
-				address: payload.address || '',
 				plan,
 				status,
 				trial_ends_at: status === 'trial' ? trialEndsAt : null,
-				feature_overrides: featureOverrides,
-				max_users: payload.maxUsers !== undefined ? parseInt(payload.maxUsers, 10) : (PLAN_FEATURES[plan]?.maxUsers ?? 2),
-				max_products: payload.maxProducts !== undefined ? parseInt(payload.maxProducts, 10) : (PLAN_FEATURES[plan]?.maxProducts ?? 100),
-				max_branches: payload.maxBranches !== undefined ? parseInt(payload.maxBranches, 10) : 1,
+				feature_overrides: tenantFeatureOverrides,
 			})
 			.select()
 			.single()
@@ -340,6 +369,14 @@ async function updateTenantFeatures(req, res, next) {
 			}
 		}
 
+		// Preserve _meta business metadata
+		if (tenant.feature_overrides?._meta) {
+			proposedOverrides._meta = {
+				...tenant.feature_overrides._meta,
+				...(proposedOverrides._meta || {}),
+			}
+		}
+
 		// Validate dependencies
 		const depCheck = validateFeatureDependencies(proposedOverrides)
 
@@ -364,15 +401,30 @@ async function updateTenantFeatures(req, res, next) {
 async function updateTenantLimits(req, res, next) {
 	try {
 		const db = getSupabase()
-		const payload = {}
-		if (req.body.maxUsers !== undefined) payload.max_users = parseInt(req.body.maxUsers, 10)
-		if (req.body.maxProducts !== undefined) payload.max_products = parseInt(req.body.maxProducts, 10)
-		if (req.body.maxBranches !== undefined) payload.max_branches = parseInt(req.body.maxBranches, 10)
+		const tenantId = req.params.id
+		const { data: tenant, error: fetchErr } = await db
+			.from('tenants')
+			.select('*')
+			.eq('id', tenantId)
+			.single()
+		if (fetchErr || !tenant) return res.status(404).json({ message: 'Tenant not found' })
+
+		const overrides = tenant.feature_overrides || {}
+		const meta = { ...(overrides._meta || {}) }
+
+		if (req.body.maxUsers !== undefined) meta.maxUsers = parseInt(req.body.maxUsers, 10)
+		if (req.body.maxProducts !== undefined) meta.maxProducts = parseInt(req.body.maxProducts, 10)
+		if (req.body.maxBranches !== undefined) meta.maxBranches = parseInt(req.body.maxBranches, 10)
+
+		const updatedOverrides = {
+			...overrides,
+			_meta: meta,
+		}
 
 		const { data, error } = await db
 			.from('tenants')
-			.update(payload)
-			.eq('id', req.params.id)
+			.update({ feature_overrides: updatedOverrides })
+			.eq('id', tenantId)
 			.select()
 			.single()
 		if (error) throw error
@@ -384,9 +436,54 @@ async function updateTenantLimits(req, res, next) {
 
 async function deleteTenant(req, res, next) {
 	try {
-		const { error } = await getSupabase().from('tenants').delete().eq('id', req.params.id)
+		const db = getSupabase()
+		const tenantId = req.params.id
+
+		const { data: tenant, error: fetchErr } = await db
+			.from('tenants')
+			.select('id')
+			.eq('id', tenantId)
+			.maybeSingle()
+
+		if (fetchErr) throw fetchErr
+		if (!tenant) {
+			return res.status(404).json({ message: 'Tenant not found' })
+		}
+
+		// Cascade delete dependent tenant records in child-to-parent order
+		const childTables = [
+			'sale_items',
+			'inventory_logs',
+			'sales',
+			'products',
+			'categories',
+			'purchases',
+			'expenses',
+			'customers',
+			'suppliers',
+			'restaurant_orders',
+			'restaurant_tables',
+			'repair_jobs',
+			'salon_appointments',
+			'hrm_payroll',
+			'hrm_attendance',
+			'hrm_employees',
+			'tenant_settings',
+			'subscriptions',
+			'users',
+		]
+
+		for (const table of childTables) {
+			try {
+				await db.from(table).delete().eq('tenant_id', tenantId)
+			} catch (_ignored) {
+				// Table may not exist in active schema; continue safely
+			}
+		}
+
+		const { error } = await db.from('tenants').delete().eq('id', tenantId)
 		if (error) throw error
-		res.json({ ok: true })
+		res.json({ ok: true, message: 'Tenant workspace successfully deleted' })
 	} catch (err) {
 		next(err)
 	}
